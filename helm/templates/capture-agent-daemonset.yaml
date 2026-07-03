@@ -1,0 +1,88 @@
+{{- if .Values.captureAgent.enabled }}
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: coach5g-capture
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: coach5g-capture
+    app.kubernetes.io/name: coach5g
+    app.kubernetes.io/component: capture-agent
+spec:
+  selector:
+    matchLabels:
+      app: coach5g-capture
+  template:
+    metadata:
+      labels:
+        app: coach5g-capture
+        app.kubernetes.io/name: coach5g
+    spec:
+      serviceAccountName: coach5g
+      hostPID: true
+      nodeSelector:
+        {{- toYaml .Values.captureAgent.nodeSelector | nindent 8 }}
+      tolerations:
+        - key: node-role.kubernetes.io/master
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: capture-agent
+          image: {{ .Values.captureAgent.image }}
+          imagePullPolicy: Always
+          securityContext:
+            privileged: true
+            capabilities:
+              add:
+                - NET_RAW
+                - NET_ADMIN
+                - SYS_PTRACE
+          ports:
+            - name: control
+              containerPort: 9998
+              protocol: TCP
+          env:
+            - name: API_SERVER_ADDR
+              value: "coach5g-api:9999"
+            - name: TARGET_NAMESPACES
+              value: "{{ range $i, $t := .Values.targets }}{{ if $i }},{{ end }}{{ $t.namespace }}{{ end }}"
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: CONTROL_ADDR
+              value: ":9998"
+            - name: GOMEMLIMIT
+              value: "900MiB"
+            - name: GOGC
+              value: "50"
+          volumeMounts:
+            - name: proc
+              mountPath: /proc
+              readOnly: true
+            - name: sys
+              mountPath: /sys
+              readOnly: true
+            {{- if .Values.captureAgent.persistence.enabled }}
+            - name: pcap-storage
+              mountPath: /pcap
+            {{- end }}
+          resources:
+            {{- toYaml .Values.captureAgent.resources | nindent 12 }}
+      volumes:
+        - name: proc
+          hostPath:
+            path: /proc
+        - name: sys
+          hostPath:
+            path: /sys
+        {{- if .Values.captureAgent.persistence.enabled }}
+        - name: pcap-storage
+          persistentVolumeClaim:
+            claimName: coach5g-pcap
+        {{- end }}
+{{- end }}

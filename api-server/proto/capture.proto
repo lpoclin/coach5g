@@ -1,0 +1,65 @@
+syntax = "proto3";
+
+package capture.v1;
+
+option go_package = "github.com/lpoclin/coach5g/api-server/internal/pb;pb";
+
+// Packet is a single decoded network packet from a capture session.
+message Packet {
+  int64  timestamp_ns   = 1;
+  string src_ip         = 2;
+  string dst_ip         = 3;
+  uint32 src_port       = 4;
+  uint32 dst_port       = 5;
+  string protocol       = 6;
+  uint32 length         = 7;
+  string info           = 8;
+  bytes  raw            = 9;
+  string interface_name = 10;
+  string pod_name       = 11;
+  string namespace      = 12;
+  string node           = 13;
+}
+
+// PacketBatch is a batch of packets from one capture session.
+message PacketBatch {
+  repeated Packet packets    = 1;
+  string          session_id = 2;
+  string          pod_ip     = 3;
+}
+
+// SubscribeRequest asks the api-server to fan out packets for a session.
+message SubscribeRequest {
+  string node           = 1;
+  string pod_name       = 2;
+  string interface_name = 3;
+}
+
+// Ack is the response to StreamPackets.
+message Ack {
+  bool ok = 1;
+}
+
+// TsharkRequest asks capture-agent to enable/disable tshark for a session.
+message TsharkRequest  { string session_id = 1; }
+message TsharkResponse { bool   ok         = 1; }
+message PingRequest    {}
+message PingResponse   { bool   ok         = 1; }
+
+// CaptureService is served by the api-server gRPC endpoint (:9999).
+// capture-agent is the client that pushes batches; the frontend WebSocket
+// handler subscribes to fan-out via Server.Subscribe().
+service CaptureService {
+  // StreamPackets: capture-agent -> api-server (client-streaming)
+  rpc StreamPackets(stream PacketBatch) returns (Ack);
+  // Subscribe: api-server -> caller (server-streaming), used internally
+  rpc Subscribe(SubscribeRequest) returns (stream PacketBatch);
+}
+
+// CaptureAgentControl is served by capture-agent (:9998).
+// api-server calls this to enable/disable tshark on demand.
+service CaptureAgentControl {
+  rpc EnableTshark(TsharkRequest)  returns (TsharkResponse);
+  rpc DisableTshark(TsharkRequest) returns (TsharkResponse);
+  rpc Ping(PingRequest)            returns (PingResponse);
+}

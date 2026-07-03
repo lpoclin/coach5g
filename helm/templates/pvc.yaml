@@ -1,0 +1,17 @@
+{{- if and .Values.captureAgent.enabled .Values.captureAgent.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: coach5g-pcap
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/name: coach5g
+    app.kubernetes.io/component: capture-agent
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: {{ .Values.captureAgent.persistence.storageClass }}
+  resources:
+    requests:
+      storage: {{ .Values.captureAgent.persistence.size }}
+{{- end }}

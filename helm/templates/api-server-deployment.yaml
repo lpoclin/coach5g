@@ -1,0 +1,73 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: coach5g-api
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: coach5g-api
+    app.kubernetes.io/name: coach5g
+    app.kubernetes.io/component: api-server
+spec:
+  replicas: {{ .Values.apiServer.replicas }}
+  selector:
+    matchLabels:
+      app: coach5g-api
+  template:
+    metadata:
+      labels:
+        app: coach5g-api
+        app.kubernetes.io/name: coach5g
+    spec:
+      serviceAccountName: coach5g
+      {{- if .Values.apiServer.nodeSelector }}
+      nodeSelector:
+        {{- toYaml .Values.apiServer.nodeSelector | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: api-server
+          image: {{ .Values.apiServer.image }}
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: grpc
+              containerPort: 9999
+              protocol: TCP
+          env:
+            - name: GIN_MODE
+              value: release
+            - name: LOKI_URL
+              value: {{ .Values.loki.url | quote }}
+            - name: PROMETHEUS_URL
+              value: {{ .Values.prometheus.url | quote }}
+            - name: HUBBLE_ADDRESS
+              value: {{ .Values.hubble.address | quote }}
+            - name: TARGET_NAMESPACES
+              value: "{{ range $i, $t := .Values.targets }}{{ if $i }},{{ end }}{{ $t.namespace }}{{ end }}"
+            {{- if .Values.terminal.enabled }}
+            - name: SSH_HOST
+              value: {{ .Values.terminal.sshHost | quote }}
+            - name: SSH_PORT
+              value: {{ .Values.terminal.sshPort | quote }}
+            {{- end }}
+            - name: CLUSTER_HYPERVISOR
+              value: {{ .Values.clusterInfo.hypervisor | quote }}
+            - name: CLUSTER_CNI_PRIMARY
+              value: {{ .Values.clusterInfo.cniPrimary | quote }}
+            - name: CLUSTER_CNI_SECONDARY
+              value: {{ .Values.clusterInfo.cniSecondary | quote }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8080
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.apiServer.resources | nindent 12 }}

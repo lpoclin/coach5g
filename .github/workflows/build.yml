@@ -1,0 +1,114 @@
+name: Build and Push Images
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+
+env:
+  REGISTRY: ghcr.io
+  FRONTEND_IMAGE: ghcr.io/lpoclin/coach5g-frontend
+  API_IMAGE:      ghcr.io/lpoclin/coach5g-api
+  CAPTURE_IMAGE:  ghcr.io/lpoclin/coach5g-capture
+  GONOSUMDB: "*"
+
+jobs:
+  build:
+    name: Build & Push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker meta — frontend
+        id: meta-frontend
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.FRONTEND_IMAGE }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,prefix=,format=short
+            type=semver,pattern={{version}}
+
+      - name: Docker meta — api-server
+        id: meta-api
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.API_IMAGE }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,prefix=,format=short
+            type=semver,pattern={{version}}
+
+      - name: Docker meta — capture-agent
+        id: meta-capture
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.CAPTURE_IMAGE }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,prefix=,format=short
+            type=semver,pattern={{version}}
+
+      - name: Build & push frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta-frontend.outputs.tags }}
+          labels: ${{ steps.meta-frontend.outputs.labels }}
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,scope=frontend,mode=max
+          platforms: linux/amd64
+
+      - name: Build & push api-server
+        uses: docker/build-push-action@v6
+        with:
+          context: ./api-server
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta-api.outputs.tags }}
+          labels: ${{ steps.meta-api.outputs.labels }}
+          cache-from: type=gha,scope=api-server
+          cache-to: type=gha,scope=api-server,mode=max
+          platforms: linux/amd64
+
+      - name: Build & push capture-agent
+        uses: docker/build-push-action@v6
+        with:
+          context: ./capture-agent
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta-capture.outputs.tags }}
+          labels: ${{ steps.meta-capture.outputs.labels }}
+          cache-from: type=gha,scope=capture-agent
+          cache-to: type=gha,scope=capture-agent,mode=max
+          platforms: linux/amd64
+
+  lint-helm:
+    name: Lint Helm Chart
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+
+      - name: Helm lint
+        run: helm lint ./helm --set gateway.ip=192.168.18.234

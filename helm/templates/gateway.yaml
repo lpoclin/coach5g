@@ -1,0 +1,22 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: coach5g
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/name: coach5g
+  annotations:
+    # Cilium LoadBalancer IP pool annotation
+    cilium.io/ipam-pool: {{ .Values.gateway.ipamPoolName | quote }}
+spec:
+  gatewayClassName: {{ .Values.gateway.gatewayClassName }}
+  listeners:
+    - name: http
+      port: 80
+      protocol: HTTP
+      allowedRoutes:
+        namespaces:
+          from: Same
+  addresses:
+    - type: IPAddress
+      value: {{ .Values.gateway.ip | quote }}

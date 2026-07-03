@@ -1,0 +1,44 @@
+# Node
+node_modules/
+dist/
+.env
+.env.local
+frontend/.env*
+*.tsbuildinfo
+
+# Go
+vendor/
+*.exe
+*.test
+*.out
+api-server/bin/
+capture-agent/bin/
+/tmp/
+
+# Proto generated
+api-server/proto/gen/
+capture-agent/proto/gen/
+
+# Helm
+*.tgz
+helm/charts/
+
+# Docker
+.docker/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# pcap
+*.pcap
+*.pcapng

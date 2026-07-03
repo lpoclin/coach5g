@@ -1,0 +1,79 @@
+namespace: monitoring
+
+targets:
+  - namespace: free5gc
+
+gateway:
+  ip: 192.168.18.234
+  gatewayClassName: cilium
+  hostname: coach5g.local
+  # Name of an existing CiliumLoadBalancerIPPool in the target cluster. This chart
+  # does not create that pool; it must already exist as a manual, cluster-level
+  # prerequisite (same as CiliumL2AnnouncementPolicy).
+  ipamPoolName: default
+
+frontend:
+  image: ghcr.io/lpoclin/coach5g-frontend:latest
+  replicas: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  nodeSelector:
+    role: observability
+
+apiServer:
+  image: ghcr.io/lpoclin/coach5g-api:latest
+  replicas: 1
+  port: 8080
+  grpcPort: 9999
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+  nodeSelector:
+    role: observability
+
+captureAgent:
+  image: ghcr.io/lpoclin/coach5g-capture:latest
+  enabled: true
+  # Only deploy on nodes with role=userplane
+  nodeSelector: {}
+  persistence:
+    enabled: false
+    storageClass: longhorn
+    size: 5Gi
+    retentionHours: 24
+  resources:
+    requests:
+      cpu: 50m
+      memory: 256Mi
+    limits:
+      # Idle: ~200Mi, 8 active tabs: ~840Mi
+      cpu: 500m
+      memory: 1Gi
+
+loki:
+  url: http://loki-gateway.loki
+
+prometheus:
+  url: http://kube-prometheus-stack-prometheus.monitoring:9090/prometheus
+
+hubble:
+  address: hubble-relay.kube-system:4245
+
+terminal:
+  enabled: true
+  sshHost: "192.168.18.210"
+  sshPort: 22
+
+clusterInfo:
+  hypervisor: "Proxmox VE"
+  cniPrimary: "Cilium"
+  cniSecondary: "Multus"
