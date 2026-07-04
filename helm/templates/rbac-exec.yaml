@@ -1,0 +1,45 @@
+{{- if .Values.execTerminal.enabled }}
+{{- $svcAccountNS := .Values.namespace }}
+{{- range $i, $t := .Values.targets }}
+{{- if $i }}
+---
+{{- end }}
+# Namespace-scoped -- not a ClusterRole -- granting create on pods/exec only,
+# in this one target namespace. Deliberately not appended to the existing
+# cluster-wide, read-only `coach5g` ClusterRole (helm/templates/rbac.yaml):
+# pods/exec create is categorically more sensitive than any read verb, and
+# that ClusterRole's ServiceAccount is shared by the frontend and
+# capture-agent, neither of which needs exec. See
+# docs/RISK_ASSESSMENT_ADDITIONS.md Addition 4 and
+# docs/EXEC_IDENTITY_ASSESSMENT.md.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: coach5g-exec
+  namespace: {{ $t.namespace }}
+  labels:
+    app.kubernetes.io/name: coach5g
+    app.kubernetes.io/component: rbac-exec
+rules:
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: coach5g-exec
+  namespace: {{ $t.namespace }}
+  labels:
+    app.kubernetes.io/name: coach5g
+    app.kubernetes.io/component: rbac-exec
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: coach5g-exec
+subjects:
+  - kind: ServiceAccount
+    name: coach5g-exec
+    namespace: {{ $svcAccountNS }}
+{{- end }}
+{{- end }}

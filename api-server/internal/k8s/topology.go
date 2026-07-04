@@ -13,111 +13,64 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
-	sigsyaml "sigs.k8s.io/yaml"
+
+	"github.com/lpoclin/coach5g/api-server/internal/k8s/coreprofile"
 )
 
 // ─── Model types ──────────────────────────────────────────────────────────────
+// Canonical definitions now live in package coreprofile (shared with
+// CoreProfile implementations); these are type/const aliases so the rest of
+// this file's existing code keeps working unqualified. See
+// docs/NF_CLASSIFICATION_REFACTOR_ASSESSMENT.md for why.
 
-type NFType string
-
-const (
-	NFTypeNRF     NFType = "NRF"
-	NFTypeAMF     NFType = "AMF"
-	NFTypeSMF     NFType = "SMF"
-	NFTypeAUSF    NFType = "AUSF"
-	NFTypeUDM     NFType = "UDM"
-	NFTypeUDR     NFType = "UDR"
-	NFTypePCF     NFType = "PCF"
-	NFTypeNSSF    NFType = "NSSF"
-	NFTypeCHF     NFType = "CHF"
-	NFTypeNEF     NFType = "NEF"
-	NFTypeUPF     NFType = "UPF"
-	NFTypeIUPF    NFType = "iUPF"
-	NFTypeGNB     NFType = "gNB"
-	NFTypeUE      NFType = "UE"
-	NFTypeDN      NFType = "DN"
-	NFTypeUnknown NFType = "UNKNOWN"
-)
-
-type Plane string
-
-const (
-	PlaneSBI        Plane = "sbi"
-	PlaneUserPlane  Plane = "userplane"
-	PlaneRAN        Plane = "ran"
-	PlanePFCP       Plane = "pfcp"
-	PlaneManagement Plane = "management"
-)
-
-type PodPhase string
-type PodCondition string
-
-const (
-	PodPhaseRunning PodPhase = "Running"
-	PodPhasePending PodPhase = "Pending"
-	PodPhaseFailed  PodPhase = "Failed"
-	PodPhaseUnknown PodPhase = "Unknown"
+type (
+	NFType           = coreprofile.NFType
+	Plane            = coreprofile.Plane
+	PodPhase         = coreprofile.PodPhase
+	PodCondition     = coreprofile.PodCondition
+	PodStatus        = coreprofile.PodStatus
+	NetworkInterface = coreprofile.NetworkInterface
+	TopologyNode     = coreprofile.TopologyNode
+	TopologyEdge     = coreprofile.TopologyEdge
+	TopologyGraph    = coreprofile.TopologyGraph
 )
 
 const (
-	CondRunning          PodCondition = "Running"
-	CondCrashLoopBackOff PodCondition = "CrashLoopBackOff"
-	CondOOMKilled        PodCondition = "OOMKilled"
-	CondError            PodCondition = "Error"
-	CondPending          PodCondition = "Pending"
-	CondUnknown          PodCondition = "Unknown"
+	NFTypeNRF     = coreprofile.NFTypeNRF
+	NFTypeAMF     = coreprofile.NFTypeAMF
+	NFTypeSMF     = coreprofile.NFTypeSMF
+	NFTypeAUSF    = coreprofile.NFTypeAUSF
+	NFTypeUDM     = coreprofile.NFTypeUDM
+	NFTypeUDR     = coreprofile.NFTypeUDR
+	NFTypePCF     = coreprofile.NFTypePCF
+	NFTypeNSSF    = coreprofile.NFTypeNSSF
+	NFTypeCHF     = coreprofile.NFTypeCHF
+	NFTypeNEF     = coreprofile.NFTypeNEF
+	NFTypeUPF     = coreprofile.NFTypeUPF
+	NFTypeIUPF    = coreprofile.NFTypeIUPF
+	NFTypeGNB     = coreprofile.NFTypeGNB
+	NFTypeUE      = coreprofile.NFTypeUE
+	NFTypeDN      = coreprofile.NFTypeDN
+	NFTypeUnknown = coreprofile.NFTypeUnknown
+
+	PlaneSBI        = coreprofile.PlaneSBI
+	PlaneUserPlane  = coreprofile.PlaneUserPlane
+	PlaneRAN        = coreprofile.PlaneRAN
+	PlanePFCP       = coreprofile.PlanePFCP
+	PlaneManagement = coreprofile.PlaneManagement
+
+	PodPhaseRunning = coreprofile.PodPhaseRunning
+	PodPhasePending = coreprofile.PodPhasePending
+	PodPhaseFailed  = coreprofile.PodPhaseFailed
+	PodPhaseUnknown = coreprofile.PodPhaseUnknown
+
+	CondRunning          = coreprofile.CondRunning
+	CondCrashLoopBackOff = coreprofile.CondCrashLoopBackOff
+	CondOOMKilled        = coreprofile.CondOOMKilled
+	CondError            = coreprofile.CondError
+	CondPending          = coreprofile.CondPending
+	CondUnknown          = coreprofile.CondUnknown
 )
-
-type PodStatus struct {
-	Phase     PodPhase     `json:"phase"`
-	Ready     bool         `json:"ready"`
-	Condition PodCondition `json:"condition"`
-	Restarts  int32        `json:"restarts"`
-}
-
-type NetworkInterface struct {
-	Name      string   `json:"name"`
-	Interface string   `json:"interface"`
-	IPs       []string `json:"ips"`
-	MAC       string   `json:"mac,omitempty"`
-	IsDefault bool     `json:"isDefault"`
-}
-
-type TopologyNode struct {
-	ID          string             `json:"id"`
-	PodName     string             `json:"podName"`
-	Namespace   string             `json:"namespace"`
-	NFType      NFType             `json:"nfType"`
-	DisplayName string             `json:"displayName"`
-	NodeName    string             `json:"nodeName"`
-	NodeIP      string             `json:"nodeIP"`   // k8s node InternalIP — matches Prometheus instance label
-	Status      PodStatus          `json:"status"`
-	Interfaces  []NetworkInterface `json:"interfaces"`
-	Age         string             `json:"age"`
-	Image       string             `json:"image"`
-	Labels      map[string]string  `json:"labels"`
-}
-
-type TopologyEdge struct {
-	ID        string `json:"id"`
-	Source    string `json:"source"`
-	Target    string `json:"target"`
-	Interface string `json:"interface"`
-	Label     string `json:"label"`
-	Plane     Plane  `json:"plane"`
-	SrcIP     string `json:"srcIP,omitempty"`
-	DstIP     string `json:"dstIP,omitempty"`
-	BusEdge   bool   `json:"busEdge,omitempty"` // SBI bus edge — rendered on canvas overlay
-}
-
-type TopologyGraph struct {
-	Nodes        []TopologyNode `json:"nodes"`
-	Edges        []TopologyEdge `json:"edges"`
-	UpdatedAt    time.Time      `json:"updatedAt"`
-	Namespaces   []string       `json:"namespaces"`
-	PrimaryCNI   string         `json:"primaryCNI"`
-	SecondaryCNI string         `json:"secondaryCNI"`
-}
 
 // ─── Network-status annotation types ─────────────────────────────────────────
 
@@ -129,162 +82,10 @@ type netStatus struct {
 	Default   bool     `json:"default"`
 }
 
-// ─── NF label detection ───────────────────────────────────────────────────────
-
-// formatNFLabel converts the value of the `nf` pod label to (NFType, displayName, skip).
-// Returns skip=true for pods that should be excluded from the topology (e.g., webui).
-func formatNFLabel(nfVal string) (NFType, string, bool) {
-	lower := strings.ToLower(nfVal)
-
-	if lower == "webui" {
-		return NFTypeUnknown, "", true
-	}
-
-	// iUPF variants: iupf, iupf1, iupf2, i-upf, i-upf1
-	if strings.HasPrefix(lower, "iupf") || strings.HasPrefix(lower, "i-upf") {
-		suffix := strings.TrimPrefix(strings.TrimPrefix(lower, "i-upf"), "iupf")
-		num := strings.ToUpper(suffix)
-		if num == "" {
-			num = "1"
-		}
-		return NFTypeIUPF, "iUPF" + num, false
-	}
-
-	// PSA-UPF variants: psaupf1, psaupf2, psa-upf1, psa-upf2
-	if strings.HasPrefix(lower, "psaupf") || strings.HasPrefix(lower, "psa-upf") {
-		suffix := strings.TrimPrefix(strings.TrimPrefix(lower, "psa-upf"), "psaupf")
-		num := strings.ToUpper(suffix)
-		return NFTypeUPF, "PSA-UPF" + num, false
-	}
-
-	exact := map[string]struct {
-		nfType  NFType
-		display string
-	}{
-		"nrf":  {NFTypeNRF, "NRF"},
-		"amf":  {NFTypeAMF, "AMF"},
-		"smf":  {NFTypeSMF, "SMF"},
-		"ausf": {NFTypeAUSF, "AUSF"},
-		"udm":  {NFTypeUDM, "UDM"},
-		"udr":  {NFTypeUDR, "UDR"},
-		"pcf":  {NFTypePCF, "PCF"},
-		"nssf": {NFTypeNSSF, "NSSF"},
-		"chf":  {NFTypeCHF, "CHF"},
-		"nef":  {NFTypeNEF, "NEF"},
-		"upf":  {NFTypeUPF, "UPF"},
-	}
-	if m, ok := exact[lower]; ok {
-		return m.nfType, m.display, false
-	}
-
-	return NFTypeUnknown, strings.ToUpper(nfVal), false
-}
-
-// formatComponentLabel converts the `component` pod label (UERANSIM) to (NFType, displayName, skip).
-func formatComponentLabel(comp string) (NFType, string, bool) {
-	switch strings.ToLower(comp) {
-	case "gnb", "gnodeb":
-		return NFTypeGNB, "gNB", false
-	case "ue":
-		return NFTypeUE, "UE", false
-	default:
-		return NFTypeUnknown, "", true
-	}
-}
-
-// fallbackNFMap is used when both nf and component labels are absent.
-var fallbackNFMap = []struct {
-	keywords []string
-	nfType   NFType
-	display  string
-}{
-	{[]string{"nrf"}, NFTypeNRF, "NRF"},
-	{[]string{"ausf"}, NFTypeAUSF, "AUSF"},
-	{[]string{"udm"}, NFTypeUDM, "UDM"},
-	{[]string{"udr"}, NFTypeUDR, "UDR"},
-	{[]string{"nssf"}, NFTypeNSSF, "NSSF"},
-	{[]string{"chf"}, NFTypeCHF, "CHF"},
-	{[]string{"nef"}, NFTypeNEF, "NEF"},
-	{[]string{"pcf"}, NFTypePCF, "PCF"},
-	{[]string{"amf"}, NFTypeAMF, "AMF"},
-	{[]string{"smf"}, NFTypeSMF, "SMF"},
-	// iUPF before UPF
-	{[]string{"iupf", "i-upf"}, NFTypeIUPF, "iUPF"},
-	{[]string{"psaupf", "psa-upf"}, NFTypeUPF, "PSA-UPF"},
-	{[]string{"upf"}, NFTypeUPF, "UPF"},
-	{[]string{"gnb", "gnode", "gnodeb"}, NFTypeGNB, "gNB"},
-	{[]string{"ue", "uesim"}, NFTypeUE, "UE"},
-}
-
-func detectNFType(pod *corev1.Pod, ifaces []NetworkInterface) (NFType, string) {
-	// 0. app.kubernetes.io/component — bare values only; formatNFLabel handles "amf", "smf", etc.
-	if compVal, ok := pod.Labels["app.kubernetes.io/component"]; ok {
-		nfType, display, skip := formatNFLabel(compVal)
-		if !skip && nfType != NFTypeUnknown {
-			return nfType, display
-		}
-	}
-
-	// 1. nf label — free5GC (nf=amf, nf=psaupf1, nf=iupf1, etc.); handles PSA/iUPF variants
-	if nfVal, ok := pod.Labels["nf"]; ok {
-		nfType, display, skip := formatNFLabel(nfVal)
-		if skip {
-			return NFTypeUnknown, ""
-		}
-		if nfType != NFTypeUnknown {
-			return nfType, display
-		}
-	}
-
-	// 2. component label — UERANSIM (component=gnb, component=ue)
-	if comp, ok := pod.Labels["component"]; ok {
-		nfType, display, skip := formatComponentLabel(comp)
-		if !skip && nfType != NFTypeUnknown {
-			return nfType, display
-		}
-	}
-
-	// 3. app.kubernetes.io/name — compound names ("oai-amf", "open5gs-smf", "free5gc-upf").
-	// Substring scan only — no formatNFLabel — so PSA-UPF/iUPF distinction is not attempted here.
-	// Only reached when priorities 1 and 2 both failed, preserving free5GC/UERANSIM accuracy.
-	if nameVal, ok := pod.Labels["app.kubernetes.io/name"]; ok {
-		lower := strings.ToLower(nameVal)
-		for _, entry := range fallbackNFMap {
-			for _, kw := range entry.keywords {
-				if strings.Contains(lower, kw) {
-					return entry.nfType, entry.display
-				}
-			}
-		}
-	}
-
-	// 4. Pod name fallback — same keyword list; iUPF interface heuristic applied for UPF pods
-	name := strings.ToLower(pod.Name)
-
-	ifaceNames := make(map[string]bool)
-	for _, iface := range ifaces {
-		ifaceNames[iface.Interface] = true
-	}
-	if strings.Contains(name, "upf") {
-		if ifaceNames["n9"] && ifaceNames["n3"] && !ifaceNames["n6"] {
-			return NFTypeIUPF, "iUPF"
-		}
-		if strings.Contains(name, "psa") {
-			return NFTypeUPF, "PSA-UPF"
-		}
-		return NFTypeUPF, "UPF"
-	}
-
-	for _, entry := range fallbackNFMap {
-		for _, kw := range entry.keywords {
-			if strings.Contains(name, kw) {
-				return entry.nfType, entry.display
-			}
-		}
-	}
-
-	return NFTypeUnknown, "UNKNOWN"
-}
+// ─── NF classification ────────────────────────────────────────────────────────
+// Moved to package coreprofile (Free5GCProfile.ClassifyNF for the
+// free5GC-specific steps, coreprofile.ClassifyNF for the dispatcher and
+// shared generic fallback). See docs/NF_CLASSIFICATION_REFACTOR_ASSESSMENT.md.
 
 // dedupVendorPrefixes are pod-name segments that carry no distinguishing information.
 var dedupVendorPrefixes = map[string]bool{
@@ -468,61 +269,14 @@ func deduplicateDisplayNames(nodes []TopologyNode, created map[string]time.Time)
 }
 
 // ─── UPF configmap / DNN detection ───────────────────────────────────────────
-
-type upfDNNItem struct {
-	DNN string `json:"dnn"`
-}
-
-type upfConfigSection struct {
-	DNNList []upfDNNItem `json:"dnnList"`
-}
-
-type upfYAMLDoc struct {
-	Configuration upfConfigSection `json:"configuration"`
-}
-
-type upfDNNEntry struct {
-	nfLabel string // value of the `nf` label on the configmap; "" = applies to all UPFs
-	dnns    []string
-}
-
-func getUPFDNNEntries(ctx context.Context, cs *kubernetes.Clientset, namespaces []string) []upfDNNEntry {
-	var entries []upfDNNEntry
-
-	for _, ns := range namespaces {
-		cms, err := cs.CoreV1().ConfigMaps(ns).List(ctx, metav1.ListOptions{})
-		if err != nil {
-			continue
-		}
-		for _, cm := range cms.Items {
-			raw, ok := cm.Data["upfcfg.yaml"]
-			if !ok {
-				continue
-			}
-			var doc upfYAMLDoc
-			if err := sigsyaml.Unmarshal([]byte(raw), &doc); err != nil {
-				continue
-			}
-			var dnns []string
-			for _, d := range doc.Configuration.DNNList {
-				if d.DNN != "" {
-					dnns = append(dnns, d.DNN)
-				}
-			}
-			if len(dnns) == 0 {
-				continue
-			}
-			nfLabel := cm.Labels["nf"]
-			entries = append(entries, upfDNNEntry{nfLabel: nfLabel, dnns: dnns})
-		}
-	}
-	return entries
-}
+// ParseUPFConfig moved to package coreprofile (Free5GCProfile.ParseUPFConfig);
+// buildDNNodes below stays here since it operates on already-classified
+// nodes generically and isn't core-specific itself.
 
 // buildDNNodes returns virtual DN nodes and two lookup maps:
 //   - upfNodeDNNs: UPF node ID → []dnn (which DNNs each UPF serves)
 //   - dnByDNN: dnn string → DN TopologyNode
-func buildDNNodes(nodes []TopologyNode, entries []upfDNNEntry) ([]TopologyNode, map[string][]string, map[string]TopologyNode) {
+func buildDNNodes(nodes []TopologyNode, entries []coreprofile.UPFDNNEntry) ([]TopologyNode, map[string][]string, map[string]TopologyNode) {
 	upfNodeDNNs := make(map[string][]string)
 
 	// Index UPF nodes by their nf label for matching
@@ -540,14 +294,14 @@ func buildDNNodes(nodes []TopologyNode, entries []upfDNNEntry) ([]TopologyNode, 
 	}
 
 	for _, entry := range entries {
-		if entry.nfLabel != "" {
-			for _, nodeID := range upfByNFLabel[entry.nfLabel] {
-				upfNodeDNNs[nodeID] = append(upfNodeDNNs[nodeID], entry.dnns...)
+		if entry.NFLabel != "" {
+			for _, nodeID := range upfByNFLabel[entry.NFLabel] {
+				upfNodeDNNs[nodeID] = append(upfNodeDNNs[nodeID], entry.DNNs...)
 			}
 		} else {
 			for _, n := range nodes {
 				if n.NFType == NFTypeUPF {
-					upfNodeDNNs[n.ID] = append(upfNodeDNNs[n.ID], entry.dnns...)
+					upfNodeDNNs[n.ID] = append(upfNodeDNNs[n.ID], entry.DNNs...)
 				}
 			}
 		}
@@ -738,7 +492,7 @@ func detectSecondaryCNI(ctx context.Context, cs *kubernetes.Clientset) string {
 
 // ─── Topology discovery ───────────────────────────────────────────────────────
 
-func BuildTopology(ctx context.Context, cs *kubernetes.Clientset, namespaces []string) (*TopologyGraph, error) {
+func BuildTopology(ctx context.Context, cs *kubernetes.Clientset, namespaces []string, profile coreprofile.CoreProfile) (*TopologyGraph, error) {
 	var nodes []TopologyNode
 	nsSet := make(map[string]bool)
 	created := make(map[string]time.Time)
@@ -749,7 +503,7 @@ func BuildTopology(ctx context.Context, cs *kubernetes.Clientset, namespaces []s
 			return nil, fmt.Errorf("list pods in %s: %w", ns, err)
 		}
 		for _, pod := range pods.Items {
-			node := podToNode(&pod)
+			node := podToNode(&pod, profile)
 			if node != nil {
 				nodes = append(nodes, *node)
 				created[pod.Name] = pod.CreationTimestamp.Time
@@ -770,11 +524,11 @@ func BuildTopology(ctx context.Context, cs *kubernetes.Clientset, namespaces []s
 	deduplicateDisplayNames(nodes, created)
 
 	// Detect DNNs from UPF configmaps and build virtual DN nodes
-	cmEntries := getUPFDNNEntries(ctx, cs, namespaces)
+	cmEntries := profile.ParseUPFConfig(ctx, cs, namespaces)
 	dnNodes, upfNodeDNNs, dnByDNN := buildDNNodes(nodes, cmEntries)
 	nodes = append(nodes, dnNodes...)
 
-	edges := buildEdges(nodes, upfNodeDNNs, dnByDNN)
+	edges := profile.BuildEdges(nodes, upfNodeDNNs, dnByDNN)
 	primaryCNI := DetectPrimaryCNI(ctx, cs)
 	secondaryCNI := detectSecondaryCNI(ctx, cs)
 
@@ -790,7 +544,7 @@ func BuildTopology(ctx context.Context, cs *kubernetes.Clientset, namespaces []s
 
 // ─── Pod → TopologyNode ───────────────────────────────────────────────────────
 
-func podToNode(pod *corev1.Pod) *TopologyNode {
+func podToNode(pod *corev1.Pod, profile coreprofile.CoreProfile) *TopologyNode {
 	if pod.Status.Phase == corev1.PodSucceeded || pod.Status.Phase == corev1.PodFailed {
 		return nil
 	}
@@ -801,7 +555,7 @@ func podToNode(pod *corev1.Pod) *TopologyNode {
 	}
 
 	ifaces := parseNetworkStatus(pod.Annotations)
-	nfType, displayName := detectNFType(pod, ifaces)
+	nfType, displayName := coreprofile.ClassifyNF(profile, pod, ifaces)
 
 	if nfType == NFTypeUnknown {
 		return nil
@@ -830,6 +584,11 @@ func podToNode(pod *corev1.Pod) *TopologyNode {
 		img = pod.Spec.Containers[0].Image
 	}
 
+	containers := make([]string, 0, len(pod.Spec.Containers))
+	for _, c := range pod.Spec.Containers {
+		containers = append(containers, c.Name)
+	}
+
 	return &TopologyNode{
 		ID:          string(pod.UID),
 		PodName:     pod.Name,
@@ -843,6 +602,7 @@ func podToNode(pod *corev1.Pod) *TopologyNode {
 		Age:         age,
 		Image:       img,
 		Labels:      pod.Labels,
+		Containers:  containers,
 	}
 }
 
@@ -920,125 +680,5 @@ func podStatus(pod *corev1.Pod) PodStatus {
 
 // ─── Edge building ────────────────────────────────────────────────────────────
 
-func buildEdges(nodes []TopologyNode, upfNodeDNNs map[string][]string, dnByDNN map[string]TopologyNode) []TopologyEdge {
-	byType := make(map[NFType][]TopologyNode)
-	for _, n := range nodes {
-		if n.NFType != NFTypeDN {
-			byType[n.NFType] = append(byType[n.NFType], n)
-		}
-	}
-
-	var edges []TopologyEdge
-
-	// Safe 8-char prefix for edge IDs (avoids panic on short UUIDs or short virtual IDs)
-	idShort := func(id string) string {
-		if len(id) > 8 {
-			return id[:8]
-		}
-		return id
-	}
-	addEdge := func(src, dst TopologyNode, iface, label string, plane Plane) {
-		edges = append(edges, TopologyEdge{
-			ID:        fmt.Sprintf("e-%s-%s-%s", idShort(src.ID), idShort(dst.ID), iface),
-			Source:    src.ID,
-			Target:    dst.ID,
-			Interface: iface,
-			Label:     label,
-			Plane:     plane,
-		})
-	}
-
-	iupfs := byType[NFTypeIUPF]
-	upfs := byType[NFTypeUPF]
-
-	// N1: UE ↔ gNB (NAS-over-RAN)
-	for _, ue := range byType[NFTypeUE] {
-		for _, gnb := range byType[NFTypeGNB] {
-			addEdge(ue, gnb, "n1", "N1", PlaneRAN)
-		}
-	}
-
-	// N2: gNB ↔ AMF (NGAP)
-	for _, gnb := range byType[NFTypeGNB] {
-		for _, amf := range byType[NFTypeAMF] {
-			addEdge(gnb, amf, "n2", "N2", PlaneRAN)
-		}
-	}
-
-	// N3: gNB → iUPF (ULCL) or gNB → UPF (single)
-	for _, gnb := range byType[NFTypeGNB] {
-		if len(iupfs) > 0 {
-			for _, iupf := range iupfs {
-				addEdge(gnb, iupf, "n3", "N3", PlaneUserPlane)
-			}
-		} else {
-			for _, upf := range upfs {
-				addEdge(gnb, upf, "n3", "N3", PlaneUserPlane)
-			}
-		}
-	}
-
-	// N4: SMF ↔ all UPFs (PFCP)
-	for _, smf := range byType[NFTypeSMF] {
-		for _, iupf := range iupfs {
-			addEdge(smf, iupf, "n4", "N4", PlanePFCP)
-		}
-		for _, upf := range upfs {
-			addEdge(smf, upf, "n4", "N4", PlanePFCP)
-		}
-	}
-
-	// N9: iUPF → PSA-UPFs (GTP-U tunnel between UPFs)
-	for _, iupf := range iupfs {
-		for _, upf := range upfs {
-			addEdge(iupf, upf, "n9", "N9", PlaneUserPlane)
-		}
-	}
-
-	// N6: PSA-UPF (or single UPF) → DN, one edge per DNN served
-	for _, upf := range upfs {
-		dnns := upfNodeDNNs[upf.ID]
-		for _, dnn := range dnns {
-			if dn, ok := dnByDNN[dnn]; ok {
-				addEdge(upf, dn, "n6", "N6", PlaneUserPlane)
-			}
-		}
-		// Fallback: no DNN mapped → connect to every DN node
-		if len(dnns) == 0 {
-			for _, dn := range dnByDNN {
-				addEdge(upf, dn, "n6", "N6", PlaneUserPlane)
-			}
-		}
-	}
-
-	// SBI: NRF ↔ each CP NF, labelled with the NF's service name.
-	// BusEdge=true: these are rendered on the canvas SBI bus overlay, not as Cytoscape edges.
-	sbiLabel := map[NFType]string{
-		NFTypeAMF:  "Namf",
-		NFTypeSMF:  "Nsmf",
-		NFTypeAUSF: "Nausf",
-		NFTypeUDM:  "Nudm",
-		NFTypeUDR:  "Nudr",
-		NFTypePCF:  "Npcf",
-		NFTypeNSSF: "Nnssf",
-		NFTypeCHF:  "Nchf",
-		NFTypeNEF:  "Nnef",
-	}
-	for _, nrf := range byType[NFTypeNRF] {
-		for nfType, lbl := range sbiLabel {
-			for _, nf := range byType[nfType] {
-				edges = append(edges, TopologyEdge{
-					ID:        fmt.Sprintf("e-sbi-%s-%s", idShort(nrf.ID), idShort(nf.ID)),
-					Source:    nrf.ID,
-					Target:    nf.ID,
-					Interface: "sbi",
-					Label:     lbl,
-					Plane:     PlaneSBI,
-					BusEdge:   true,
-				})
-			}
-		}
-	}
-
-	return edges
-}
+// buildEdges moved to package coreprofile (Free5GCProfile.BuildEdges); see
+// docs/NF_CLASSIFICATION_REFACTOR_ASSESSMENT.md.

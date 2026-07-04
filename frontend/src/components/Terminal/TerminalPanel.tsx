@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 'react'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import { WebLinksAddon } from '@xterm/addon-web-links'
@@ -18,14 +18,39 @@ function wsUrl(): string {
   return `${proto}://${host}/ws/terminal`
 }
 
+// Addition 4 -- exec-per-pod terminal (GET /ws/exec/:namespace/:pod/:container).
+// No login step: Kubernetes RBAC on the dedicated exec-only ServiceAccount is
+// the sole authorization boundary, so the client just connects and streams.
+// See docs/RISK_ASSESSMENT_ADDITIONS.md Addition 4 and
+// docs/EXEC_IDENTITY_ASSESSMENT.md.
+function execWsUrl(namespace: string, pod: string, container: string): string {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws'
+  const host = import.meta.env.DEV
+    ? `${location.hostname}:8080`
+    : location.host
+  return `${proto}://${host}/ws/exec/${encodeURIComponent(namespace)}/${encodeURIComponent(pod)}/${encodeURIComponent(container)}`
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type ConnState = 'login' | 'connecting' | 'connected' | 'error'
+
+interface ExecTarget {
+  namespace: string
+  pod: string
+  container: string
+}
 
 interface TabDef {
   id: number
   label: string
   connected: boolean
+  kind: 'ssh' | 'exec'
+  exec?: ExecTarget
+}
+
+export interface TerminalPanelHandle {
+  openExecTab: (target: ExecTarget, label: string) => void
 }
 
 let _nextId = 1
@@ -309,6 +334,183 @@ function TerminalInstance({ tabId, active, panelOpen, onConnected, onDisconnecte
   )
 }
 
+// ─── ExecInstance ─────────────────────────────────────────────────────────────
+// Kubernetes-exec counterpart to TerminalInstance. Same always-mounted,
+// visibility-toggled lifecycle -- the tab body stays in the DOM (hidden, not
+// unmounted) so the WebSocket survives switching tabs. Unlike SSH, there is
+// no login form: the connection opens immediately and Kubernetes RBAC on the
+// dedicated exec-only ServiceAccount is the sole authorization boundary
+// (see docs/EXEC_IDENTITY_ASSESSMENT.md).
+
+interface ExecInstanceProps {
+  tabId: number
+  active: boolean
+  panelOpen: boolean
+  target: ExecTarget
+  onConnected: (id: number) => void
+  onDisconnected: (id: number) => void
+}
+
+function ExecInstance({ tabId, active, panelOpen, target, onConnected, onDisconnected }: ExecInstanceProps) {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const termRef = useRef<Terminal | null>(null)
+  const fitRef = useRef<FitAddon | null>(null)
+  const wsRef = useRef<WebSocket | null>(null)
+  const mountedRef = useRef(false)
+  const connectedOnceRef = useRef(false)
+
+  const [connState, setConnState] = useState<'connecting' | 'connected' | 'error'>('connecting')
+  const [errorMsg, setErrorMsg] = useState('')
+
+  // ── Mount / unmount xterm when state reaches 'connected' ──────────────────
+  useEffect(() => {
+    if (connState !== 'connected' || !containerRef.current || mountedRef.current) return
+    mountedRef.current = true
+
+    const term = new Terminal({
+      theme: {
+        background:         '#0d1117',
+        foreground:         '#f0f6fc',
+        cursor:             '#58a6ff',
+        cursorAccent:       '#0d1117',
+        selectionBackground:'#264f78',
+        black:   '#0d1117', red:     '#ff7b72', green:  '#3fb950', yellow: '#d29922',
+        blue:    '#58a6ff', magenta: '#bc8cff', cyan:   '#39c5cf', white:  '#b1bac4',
+        brightBlack:   '#6e7681', brightRed:     '#ffa198', brightGreen:  '#56d364',
+        brightYellow:  '#e3b341', brightBlue:    '#79c0ff', brightMagenta:'#d2a8ff',
+        brightCyan:    '#56d4dd', brightWhite:   '#f0f6fc',
+      },
+      fontFamily: '"JetBrains Mono", "Cascadia Code", "Fira Code", Consolas, monospace',
+      fontSize:   13,
+      lineHeight: 1.4,
+      cursorBlink: true,
+      cursorStyle: 'block',
+      scrollback:  5000,
+      allowProposedApi: true,
+    })
+
+    const fit = new FitAddon()
+    term.loadAddon(fit)
+    term.loadAddon(new WebLinksAddon())
+    term.open(containerRef.current)
+
+    termRef.current = term
+    fitRef.current  = fit
+
+    term.onData(data => {
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: 'input', data }))
+      }
+    })
+
+    if (active && panelOpen) {
+      requestAnimationFrame(() => fit.fit())
+    }
+
+    return () => {
+      term.dispose()
+      termRef.current  = null
+      fitRef.current   = null
+      mountedRef.current = false
+    }
+  }, [connState]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Resize when tab becomes active or panel opens ─────────────────────────
+  useEffect(() => {
+    if (!active || !panelOpen || !fitRef.current || !termRef.current) return
+    const t = setTimeout(() => {
+      fitRef.current?.fit()
+      sendResize()
+    }, 40)
+    return () => clearTimeout(t)
+  }, [active, panelOpen]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── ResizeObserver on container ───────────────────────────────────────────
+  useEffect(() => {
+    if (!containerRef.current) return
+    const ro = new ResizeObserver(() => {
+      if (!fitRef.current || !termRef.current || !active) return
+      fitRef.current.fit()
+      sendResize()
+    })
+    ro.observe(containerRef.current)
+    return () => ro.disconnect()
+  }, [active, connState]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function sendResize() {
+    const term = termRef.current
+    const ws   = wsRef.current
+    if (!term || ws?.readyState !== WebSocket.OPEN) return
+    ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }))
+  }
+
+  // ── Connect immediately on mount (no login step) ───────────────────────────
+  useEffect(() => {
+    const ws = new WebSocket(execWsUrl(target.namespace, target.pod, target.container))
+    wsRef.current = ws
+
+    ws.onopen = () => {
+      setConnState('connected')
+      connectedOnceRef.current = true
+      onConnected(tabId)
+    }
+
+    ws.onmessage = (ev) => {
+      const msg: { type: string; data?: string } = JSON.parse(ev.data)
+      if (msg.type === 'output') termRef.current?.write(msg.data ?? '')
+    }
+
+    ws.onerror = () => {
+      if (!connectedOnceRef.current) {
+        setConnState('error')
+        setErrorMsg('WebSocket connection failed')
+      }
+    }
+
+    ws.onclose = () => {
+      if (connectedOnceRef.current) {
+        termRef.current?.write('\r\n\x1b[2m[session closed]\x1b[0m\r\n')
+        onDisconnected(tabId)
+      } else {
+        setConnState('error')
+        setErrorMsg('Connection closed before session started')
+      }
+    }
+
+    return () => { ws.close() }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  if (connState === 'error') {
+    return (
+      <div className="flex items-center justify-center h-full" style={{ background: '#0d1117' }}>
+        <p className="text-center text-[11px] px-3 py-1.5 rounded font-mono"
+           style={{ color: '#f85149', background: '#1a0a0a', border: '1px solid #3d1a1a' }}>
+          {errorMsg}
+        </p>
+      </div>
+    )
+  }
+
+  if (connState === 'connecting') {
+    return (
+      <div className="flex items-center justify-center h-full" style={{ background: '#0d1117' }}>
+        <span className="text-xs font-mono animate-pulse" style={{ color: '#8b949e' }}>
+          Opening shell in {target.pod} ({target.container})…
+        </span>
+      </div>
+    )
+  }
+
+  return (
+    <div
+      ref={containerRef}
+      className="w-full h-full"
+      style={{ background: '#0d1117', padding: '2px 4px' }}
+    />
+  )
+}
+
 // ─── TerminalPanel ────────────────────────────────────────────────────────────
 
 export interface TerminalPanelProps {
@@ -318,17 +520,29 @@ export interface TerminalPanelProps {
   bodyRef?: React.RefObject<HTMLDivElement | null>  // for DOM-direct resize during drag
 }
 
-export default function TerminalPanel({ open, onToggle, height = 260, bodyRef }: TerminalPanelProps) {
-  const [tabs, setTabs] = useState<TabDef[]>([{ id: _nextId++, label: 'Terminal 1', connected: false }])
+function TerminalPanel({ open, onToggle, height = 260, bodyRef }: TerminalPanelProps, ref: React.ForwardedRef<TerminalPanelHandle>) {
+  const [tabs, setTabs] = useState<TabDef[]>([{ id: _nextId++, label: 'Terminal 1', connected: false, kind: 'ssh' }])
   const [activeId, setActiveId] = useState<number>(tabs[0].id)
 
   const addTab = useCallback(() => {
     const id = _nextId++
     const label = `Terminal ${id}`
-    setTabs(prev => [...prev, { id, label, connected: false }])
+    setTabs(prev => [...prev, { id, label, connected: false, kind: 'ssh' }])
     setActiveId(id)
     if (!open) onToggle()
   }, [open, onToggle])
+
+  // Addition 4 -- opens a new exec tab targeting a specific pod/container.
+  // No tab-count ceiling: same unbounded `tabs` array addTab above already
+  // uses, so exec tabs are subject to the identical (lack of a) limit.
+  const openExecTab = useCallback((target: ExecTarget, label: string) => {
+    const id = _nextId++
+    setTabs(prev => [...prev, { id, label, connected: false, kind: 'exec', exec: target }])
+    setActiveId(id)
+    if (!open) onToggle()
+  }, [open, onToggle])
+
+  useImperativeHandle(ref, () => ({ openExecTab }), [openExecTab])
 
   const closeTab = useCallback((id: number, e: React.MouseEvent) => {
     e.stopPropagation()
@@ -446,16 +660,29 @@ export default function TerminalPanel({ open, onToggle, height = 260, bodyRef }:
               visibility: tab.id === activeId ? 'visible' : 'hidden',
             }}
           >
-            <TerminalInstance
-              tabId={tab.id}
-              active={tab.id === activeId}
-              panelOpen={open}
-              onConnected={handleConnected}
-              onDisconnected={handleDisconnected}
-            />
+            {tab.kind === 'exec' && tab.exec ? (
+              <ExecInstance
+                tabId={tab.id}
+                active={tab.id === activeId}
+                panelOpen={open}
+                target={tab.exec}
+                onConnected={handleConnected}
+                onDisconnected={handleDisconnected}
+              />
+            ) : (
+              <TerminalInstance
+                tabId={tab.id}
+                active={tab.id === activeId}
+                panelOpen={open}
+                onConnected={handleConnected}
+                onDisconnected={handleDisconnected}
+              />
+            )}
           </div>
         ))}
       </div>
     </div>
   )
 }
+
+export default forwardRef(TerminalPanel)

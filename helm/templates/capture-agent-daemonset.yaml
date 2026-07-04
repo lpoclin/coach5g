@@ -60,6 +60,16 @@ spec:
               value: "900MiB"
             - name: GOGC
               value: "50"
+            {{- if .Values.grpc.tls.enabled }}
+            - name: GRPC_TLS_ENABLED
+              value: "true"
+            - name: GRPC_TLS_CERT_FILE
+              value: /etc/coach5g/grpc-tls/tls.crt
+            - name: GRPC_TLS_KEY_FILE
+              value: /etc/coach5g/grpc-tls/tls.key
+            - name: GRPC_TLS_CA_FILE
+              value: /etc/coach5g/grpc-tls/ca.crt
+            {{- end }}
           volumeMounts:
             - name: proc
               mountPath: /proc
@@ -70,6 +80,11 @@ spec:
             {{- if .Values.captureAgent.persistence.enabled }}
             - name: pcap-storage
               mountPath: /pcap
+            {{- end }}
+            {{- if .Values.grpc.tls.enabled }}
+            - name: grpc-tls
+              mountPath: /etc/coach5g/grpc-tls
+              readOnly: true
             {{- end }}
           resources:
             {{- toYaml .Values.captureAgent.resources | nindent 12 }}
@@ -84,5 +99,10 @@ spec:
         - name: pcap-storage
           persistentVolumeClaim:
             claimName: coach5g-pcap
+        {{- end }}
+        {{- if .Values.grpc.tls.enabled }}
+        - name: grpc-tls
+          secret:
+            secretName: {{ .Values.grpc.tls.captureAgentSecretName }}
         {{- end }}
 {{- end }}

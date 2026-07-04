@@ -37,6 +37,7 @@ export interface TopologyNode {
   age: string
   image: string
   labels: Record<string, string>
+  containers: string[]
 }
 
 export interface TopologyEdge {

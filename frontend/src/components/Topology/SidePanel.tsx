@@ -26,6 +26,9 @@ interface Props {
   activeTabId: string | null
   onTabSelect: (id: string) => void
   onTabClose: (id: string) => void
+  // Addition 4 -- opens an exec tab for (namespace, pod, container) in the
+  // terminal panel. Omitted if the caller doesn't support it.
+  onOpenShell?: (namespace: string, pod: string, container: string, label: string) => void
 }
 
 interface IfaceMeta { throughputMbps: number; packetsPerSec: number; dropRate: number; isCilium?: boolean }
@@ -348,8 +351,58 @@ function PodInfo({ node, ifaceMetrics, clusterInfo }: {
   )
 }
 
+// ─── Shell button (Addition 4) ─────────────────────────────────────────────────
+// If the pod has more than one container, clicking opens a small picker;
+// with exactly one (the common case), it skips straight to opening.
+function ShellButton({
+  node,
+  onOpenShell,
+}: {
+  node: TopologyNode
+  onOpenShell: (namespace: string, pod: string, container: string, label: string) => void
+}) {
+  const [menuOpen, setMenuOpen] = useState(false)
+  const containers = node.containers ?? []
+
+  const openFor = (container: string) => {
+    setMenuOpen(false)
+    const label = containers.length > 1 ? `${node.displayName}:${container}` : node.displayName
+    onOpenShell(node.namespace, node.podName, container, label)
+  }
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => (containers.length > 1 ? setMenuOpen(v => !v) : openFor(containers[0] ?? ''))}
+        className="text-xs px-2 py-0.5 rounded text-slate-400 hover:text-slate-200"
+        style={{ border: '1px solid #30363d' }}
+        title="Open shell in this pod"
+      >
+        ⌨ Shell
+      </button>
+      {menuOpen && (
+        <div
+          className="absolute right-0 mt-1 py-1 rounded shadow-lg z-10"
+          style={{ background: '#161b22', border: '1px solid #30363d', minWidth: 140 }}
+        >
+          {containers.map(c => (
+            <button
+              key={c}
+              onClick={() => openFor(c)}
+              className="block w-full text-left px-3 py-1 text-xs font-mono hover:bg-[#1c2128]"
+              style={{ color: '#e6edf3' }}
+            >
+              {c}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Main SidePanel ───────────────────────────────────────────────────────────
-export default function SidePanel({ node, allNodes: _allNodes, onClose, onCaptureEdge: _onCaptureEdge, tabs, activeTabId, onTabSelect, onTabClose }: Props) {
+export default function SidePanel({ node, allNodes: _allNodes, onClose, onCaptureEdge: _onCaptureEdge, tabs, activeTabId, onTabSelect, onTabClose, onOpenShell }: Props) {
   const [view, setView] = useState<'logs' | 'info'>('logs')
 
   // ── Interface metrics ──────────────────────────────────────────────────────
@@ -399,6 +452,11 @@ export default function SidePanel({ node, allNodes: _allNodes, onClose, onCaptur
             Info
           </button>
         </div>
+        {onOpenShell && (
+          <div className="pl-2 ml-1 border-l border-border">
+            <ShellButton node={node} onOpenShell={onOpenShell} />
+          </div>
+        )}
         <button onClick={onClose} className="text-slate-600 hover:text-slate-300">
           <IconX className="w-4 h-4" />
         </button>

@@ -17,6 +17,24 @@ spec:
       allowedRoutes:
         namespaces:
           from: Same
+    {{- if .Values.gateway.tls.enabled }}
+    # HTTPS listener coexists with the HTTP listener above -- no forced
+    # redirect. Add a RequestRedirect filter to httproute.yaml's rules if
+    # HTTP -> HTTPS redirect is wanted later; the HTTPRoute already attaches
+    # to this listener automatically (its parentRefs omits sectionName, so
+    # per the Gateway API spec it attaches to every compatible listener).
+    - name: https
+      port: 443
+      protocol: HTTPS
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - kind: Secret
+            name: {{ .Values.gateway.tls.secretName }}
+      allowedRoutes:
+        namespaces:
+          from: Same
+    {{- end }}
   addresses:
     - type: IPAddress
       value: {{ .Values.gateway.ip | quote }}

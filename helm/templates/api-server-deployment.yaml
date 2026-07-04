@@ -57,6 +57,39 @@ spec:
               value: {{ .Values.clusterInfo.cniPrimary | quote }}
             - name: CLUSTER_CNI_SECONDARY
               value: {{ .Values.clusterInfo.cniSecondary | quote }}
+            - name: ALLOWED_ORIGINS
+              value: "http://{{ .Values.gateway.hostname }},https://{{ .Values.gateway.hostname }}{{ range .Values.allowedOrigins }},{{ . }}{{ end }}"
+            {{- if .Values.grpc.tls.enabled }}
+            - name: GRPC_TLS_ENABLED
+              value: "true"
+            - name: GRPC_TLS_CERT_FILE
+              value: /etc/coach5g/grpc-tls/tls.crt
+            - name: GRPC_TLS_KEY_FILE
+              value: /etc/coach5g/grpc-tls/tls.key
+            - name: GRPC_TLS_CA_FILE
+              value: /etc/coach5g/grpc-tls/ca.crt
+            - name: GRPC_TLS_CAPTURE_AGENT_IDENTITY
+              value: {{ .Values.grpc.tls.captureAgentIdentity | quote }}
+            {{- end }}
+            {{- if .Values.execTerminal.enabled }}
+            - name: EXEC_TERMINAL_ENABLED
+              value: "true"
+            - name: EXEC_SA_TOKEN_FILE
+              value: /etc/coach5g/exec-token/token
+            {{- end }}
+          {{- if or .Values.grpc.tls.enabled .Values.execTerminal.enabled }}
+          volumeMounts:
+            {{- if .Values.grpc.tls.enabled }}
+            - name: grpc-tls
+              mountPath: /etc/coach5g/grpc-tls
+              readOnly: true
+            {{- end }}
+            {{- if .Values.execTerminal.enabled }}
+            - name: exec-sa-token
+              mountPath: /etc/coach5g/exec-token
+              readOnly: true
+            {{- end }}
+          {{- end }}
           livenessProbe:
             httpGet:
               path: /health
@@ -71,3 +104,16 @@ spec:
             periodSeconds: 5
           resources:
             {{- toYaml .Values.apiServer.resources | nindent 12 }}
+      {{- if or .Values.grpc.tls.enabled .Values.execTerminal.enabled }}
+      volumes:
+        {{- if .Values.grpc.tls.enabled }}
+        - name: grpc-tls
+          secret:
+            secretName: {{ .Values.grpc.tls.apiServerSecretName }}
+        {{- end }}
+        {{- if .Values.execTerminal.enabled }}
+        - name: exec-sa-token
+          secret:
+            secretName: coach5g-exec-token
+        {{- end }}
+      {{- end }}

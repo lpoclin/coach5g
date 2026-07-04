@@ -1,0 +1,19 @@
+{{- if .Values.auth.oauth2Proxy.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: coach5g-auth-proxy
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: coach5g-auth-proxy
+    app.kubernetes.io/name: coach5g
+spec:
+  selector:
+    app: coach5g-auth-proxy
+  ports:
+    - name: http
+      port: 4180
+      targetPort: 4180
+      protocol: TCP
+  type: ClusterIP
+{{- end }}

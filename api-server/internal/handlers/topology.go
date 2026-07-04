@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -14,10 +15,51 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	k8stopo "github.com/lpoclin/coach5g/api-server/internal/k8s"
+	"github.com/lpoclin/coach5g/api-server/internal/k8s/coreprofile"
 )
 
+// allowedOrigins mirrors cmd/server/main.go's own ALLOWED_ORIGINS parsing
+// (duplicated rather than shared across packages, consistent with how this
+// codebase already parses TARGET_NAMESPACES independently in more than one
+// place). Read once at package init so every /ws/* handler sharing upgrader
+// gets the same check with no per-handler changes.
+var allowedOrigins = parseAllowedOrigins(os.Getenv("ALLOWED_ORIGINS"))
+
+// parseAllowedOrigins splits a comma-separated origin list, trimming
+// whitespace and dropping empty entries.
+func parseAllowedOrigins(raw string) []string {
+	var out []string
+	for _, o := range strings.Split(raw, ",") {
+		if o = strings.TrimSpace(o); o != "" {
+			out = append(out, o)
+		}
+	}
+	return out
+}
+
+// originAllowed reports whether origin is an exact match for one of the
+// configured allowed origins.
+func originAllowed(origin string, allowed []string) bool {
+	for _, a := range allowed {
+		if origin == a {
+			return true
+		}
+	}
+	return false
+}
+
 var upgrader = websocket.Upgrader{
-	CheckOrigin:     func(r *http.Request) bool { return true },
+	CheckOrigin: func(r *http.Request) bool {
+		// Non-browser clients don't send an Origin header at all; that's not
+		// the cross-site-WebSocket-hijacking vector this check defends
+		// against, so absence of Origin is allowed, matching gorilla/
+		// websocket's own built-in default behavior.
+		origin := r.Header.Get("Origin")
+		if origin == "" {
+			return true
+		}
+		return originAllowed(origin, allowedOrigins)
+	},
 	ReadBufferSize:  1024,
 	WriteBufferSize: 32 * 1024,
 }
@@ -25,10 +67,11 @@ var upgrader = websocket.Upgrader{
 type TopologyHandler struct {
 	cs               *kubernetes.Clientset
 	targetNamespaces []string
+	profile          coreprofile.CoreProfile
 }
 
-func NewTopologyHandler(cs *kubernetes.Clientset, targetNamespaces []string) *TopologyHandler {
-	return &TopologyHandler{cs: cs, targetNamespaces: targetNamespaces}
+func NewTopologyHandler(cs *kubernetes.Clientset, targetNamespaces []string, profile coreprofile.CoreProfile) *TopologyHandler {
+	return &TopologyHandler{cs: cs, targetNamespaces: targetNamespaces, profile: profile}
 }
 
 var systemNamespaces = map[string]bool{
@@ -120,7 +163,7 @@ func (h *TopologyHandler) namespaceFromQuery(c *gin.Context) []string {
 func (h *TopologyHandler) GetTopology(c *gin.Context) {
 	namespaces := h.namespaceFromQuery(c)
 
-	graph, err := k8stopo.BuildTopology(c.Request.Context(), h.cs, namespaces)
+	graph, err := k8stopo.BuildTopology(c.Request.Context(), h.cs, namespaces, h.profile)
 	if err != nil {
 		log.Error().Err(err).Msg("build topology")
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -146,7 +189,7 @@ func (h *TopologyHandler) GetNamespaces(c *gin.Context) {
 // GET /api/pods/:namespace
 func (h *TopologyHandler) GetPods(c *gin.Context) {
 	ns := c.Param("namespace")
-	graph, err := k8stopo.BuildTopology(c.Request.Context(), h.cs, []string{ns})
+	graph, err := k8stopo.BuildTopology(c.Request.Context(), h.cs, []string{ns}, h.profile)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -165,7 +208,7 @@ func (h *TopologyHandler) GetPodInterfaces(c *gin.Context) {
 		return
 	}
 
-	node := k8stopo.PodToNodeExported(pod)
+	node := k8stopo.PodToNodeExported(pod, h.profile)
 	if node == nil {
 		c.JSON(http.StatusOK, []interface{}{})
 		return
@@ -188,7 +231,7 @@ func (h *TopologyHandler) WatchTopology(c *gin.Context) {
 	defer ticker.Stop()
 
 	// Send immediately on connect
-	sendTopology(conn, h.cs, namespaces)
+	sendTopology(conn, h.cs, namespaces, h.profile)
 
 	done := make(chan struct{})
 	go func() {
@@ -205,16 +248,16 @@ func (h *TopologyHandler) WatchTopology(c *gin.Context) {
 		case <-done:
 			return
 		case <-ticker.C:
-			sendTopology(conn, h.cs, namespaces)
+			sendTopology(conn, h.cs, namespaces, h.profile)
 		}
 	}
 }
 
-func sendTopology(conn *websocket.Conn, cs *kubernetes.Clientset, namespaces []string) {
+func sendTopology(conn *websocket.Conn, cs *kubernetes.Clientset, namespaces []string, profile coreprofile.CoreProfile) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	graph, err := k8stopo.BuildTopology(ctx, cs, namespaces)
+	graph, err := k8stopo.BuildTopology(ctx, cs, namespaces, profile)
 	if err != nil {
 		log.Error().Err(err).Msg("topology watch")
 		return

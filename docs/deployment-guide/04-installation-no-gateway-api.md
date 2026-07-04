@@ -41,6 +41,8 @@ This gives you three running workloads with no external access yet. `observer-ap
 
 You do not need to expose `observer-api` separately. The frontend's own nginx already proxies `/api/` and `/ws/` to `observer-api:8080` internally (`frontend/nginx.conf:14-29`), so exposing the `observer-frontend` Service alone is enough to reach the whole application.
 
+If you're also enabling `auth.oauth2Proxy` in this tier, expose `coach5g-auth-proxy` instead of `coach5g-frontend` in every command below. The auth proxy is what should be reachable from outside the cluster in that case; it forwards to the frontend internally once a user is signed in.
+
 ---
 
 ## Sub-case: NodePort
@@ -96,6 +98,17 @@ kubectl get svc observer-frontend -n monitoring -o jsonpath='{.status.loadBalanc
 If this stays empty, MetalLB either has no free addresses in its pool or is not watching this Service's namespace. That is a MetalLB configuration question, not something this chart can diagnose.
 
 Access the application at `http://<the-assigned-ip>` once it appears.
+
+---
+
+## Register your access address before you use it
+
+Whatever address you ended up with above (the NodePort URL or the MetalLB IP), add it to `values.yaml`'s `allowedOrigins` and run `helm upgrade`. The app is reachable at that address either way, but without this step api-server rejects it as a CORS/WebSocket origin and the browser will show connection errors even though `curl` works fine.
+
+```yaml
+allowedOrigins:
+  - "http://192.168.18.50:30080"
+```
 
 ---
 

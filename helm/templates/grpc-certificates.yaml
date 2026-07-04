@@ -1,0 +1,41 @@
+{{- if and .Values.grpc.tls.enabled .Values.grpc.tls.certManager.enabled }}
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ .Values.grpc.tls.apiServerSecretName }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/name: coach5g
+    app.kubernetes.io/component: api-server
+spec:
+  secretName: {{ .Values.grpc.tls.apiServerSecretName }}
+  usages:
+    - server auth
+    - client auth
+  dnsNames:
+    - coach5g-api
+    - coach5g-api.{{ .Values.namespace }}.svc
+    - coach5g-api.{{ .Values.namespace }}.svc.cluster.local
+  issuerRef:
+    name: {{ required "grpc.tls.certManager.issuerName is required when grpc.tls.certManager.enabled is true" .Values.grpc.tls.certManager.issuerName }}
+    kind: ClusterIssuer
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: {{ .Values.grpc.tls.captureAgentSecretName }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/name: coach5g
+    app.kubernetes.io/component: capture-agent
+spec:
+  secretName: {{ .Values.grpc.tls.captureAgentSecretName }}
+  usages:
+    - server auth
+    - client auth
+  dnsNames:
+    - {{ .Values.grpc.tls.captureAgentIdentity }}
+  issuerRef:
+    name: {{ required "grpc.tls.certManager.issuerName is required when grpc.tls.certManager.enabled is true" .Values.grpc.tls.certManager.issuerName }}
+    kind: ClusterIssuer
+{{- end }}

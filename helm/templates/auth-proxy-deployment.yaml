@@ -1,0 +1,103 @@
+{{- if .Values.auth.oauth2Proxy.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: coach5g-auth-proxy
+  namespace: {{ .Values.namespace }}
+  labels:
+    app: coach5g-auth-proxy
+    app.kubernetes.io/name: coach5g
+    app.kubernetes.io/component: auth-proxy
+spec:
+  replicas: {{ .Values.auth.oauth2Proxy.replicas }}
+  selector:
+    matchLabels:
+      app: coach5g-auth-proxy
+  template:
+    metadata:
+      labels:
+        app: coach5g-auth-proxy
+        app.kubernetes.io/name: coach5g
+    spec:
+      containers:
+        - name: oauth2-proxy
+          image: {{ .Values.auth.oauth2Proxy.image }}
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 4180
+              protocol: TCP
+          env:
+            - name: OAUTH2_PROXY_HTTP_ADDRESS
+              value: "0.0.0.0:4180"
+            - name: OAUTH2_PROXY_PROVIDER
+              value: google
+            # Single upstream covering every path. Relies on
+            # frontend/nginx.conf's own internal /api/,/ws/ split -- the same
+            # mechanism Tier 3 already depends on. See
+            # docs/OAUTH2_PROXY_FEASIBILITY_ASSESSMENT.md, Critical Finding.
+            - name: OAUTH2_PROXY_UPSTREAMS
+              value: http://coach5g-frontend
+            - name: OAUTH2_PROXY_REDIRECT_URL
+              value: {{ required "auth.oauth2Proxy.redirectURL is required when auth.oauth2Proxy.enabled is true" .Values.auth.oauth2Proxy.redirectURL | quote }}
+            - name: OAUTH2_PROXY_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.auth.oauth2Proxy.credentialsSecretName }}
+                  key: client-id
+            - name: OAUTH2_PROXY_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.auth.oauth2Proxy.credentialsSecretName }}
+                  key: client-secret
+            - name: OAUTH2_PROXY_COOKIE_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.auth.oauth2Proxy.credentialsSecretName }}
+                  key: cookie-secret
+            - name: OAUTH2_PROXY_COOKIE_SECURE
+              value: {{ .Values.auth.oauth2Proxy.cookieSecure | quote }}
+            {{- if .Values.auth.oauth2Proxy.emailDomains }}
+            - name: OAUTH2_PROXY_EMAIL_DOMAINS
+              value: "{{ range $i, $d := .Values.auth.oauth2Proxy.emailDomains }}{{ if $i }},{{ end }}{{ $d }}{{ end }}"
+            {{- end }}
+            {{- if .Values.auth.oauth2Proxy.authenticatedEmailsFile.enabled }}
+            - name: OAUTH2_PROXY_AUTHENTICATED_EMAILS_FILE
+              value: /etc/coach5g/oauth2-proxy/authenticated-emails.txt
+            {{- end }}
+            - name: OAUTH2_PROXY_BANNER
+              value: {{ .Values.auth.oauth2Proxy.signIn.banner | quote }}
+            {{- if .Values.auth.oauth2Proxy.signIn.logoPath }}
+            - name: OAUTH2_PROXY_CUSTOM_SIGN_IN_LOGO
+              value: {{ .Values.auth.oauth2Proxy.signIn.logoPath | quote }}
+            {{- end }}
+          {{- if .Values.auth.oauth2Proxy.authenticatedEmailsFile.enabled }}
+          volumeMounts:
+            - name: allowed-emails
+              mountPath: /etc/coach5g/oauth2-proxy
+              readOnly: true
+          {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: 4180
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 4180
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.auth.oauth2Proxy.resources | nindent 12 }}
+      {{- if .Values.auth.oauth2Proxy.authenticatedEmailsFile.enabled }}
+      volumes:
+        - name: allowed-emails
+          configMap:
+            name: {{ .Values.auth.oauth2Proxy.authenticatedEmailsFile.configMapName }}
+            items:
+              - key: authenticated-emails.txt
+                path: authenticated-emails.txt
+      {{- end }}
+{{- end }}

@@ -9,7 +9,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/keepalive"
 
 	"github.com/lpoclin/coach5g/capture-agent/internal/pb"
@@ -25,10 +25,15 @@ type Client struct {
 	podIP  string // own pod IP injected via POD_IP env, sent in every batch
 }
 
-func NewClient(addr string) (*Client, error) {
+// NewClient dials api-server at addr. dialCreds is always a fully-formed,
+// non-nil credentials value -- insecure.NewCredentials() for today's
+// plaintext default, or real TLS credentials when grpc.tls.enabled is set
+// (see cmd/agent/main.go). This package has no TLS-specific branching of its
+// own.
+func NewClient(addr string, dialCreds credentials.TransportCredentials) (*Client, error) {
 	conn, err := grpc.NewClient(
 		addr,
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithTransportCredentials(dialCreds),
 		grpc.WithKeepaliveParams(keepalive.ClientParameters{
 			Time:                30 * time.Second,
 			Timeout:             10 * time.Second,

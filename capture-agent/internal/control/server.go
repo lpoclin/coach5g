@@ -6,6 +6,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 
 	"github.com/lpoclin/coach5g/capture-agent/internal/capture"
 	"github.com/lpoclin/coach5g/capture-agent/internal/pb"
@@ -19,10 +20,15 @@ type Server struct {
 	grpcServer *grpc.Server
 }
 
-// NewServer creates the control server and registers it with a new gRPC server.
-// The gRPC server is created here so GracefulStop() is always safe to call.
-func NewServer(manager *capture.Manager) *Server {
-	srv := grpc.NewServer()
+// NewServer creates the control server and registers it with a new gRPC
+// server. The gRPC server is created here so GracefulStop() is always safe to
+// call. serverCreds is used for the control listener -- callers always pass
+// fully-formed, non-nil credentials (insecure.NewCredentials() for today's
+// plaintext default, or real mTLS credentials when grpc.tls.enabled is set;
+// see cmd/agent/main.go). This package has no TLS-specific branching of its
+// own.
+func NewServer(manager *capture.Manager, serverCreds credentials.TransportCredentials) *Server {
+	srv := grpc.NewServer(grpc.Creds(serverCreds))
 	s := &Server{manager: manager, grpcServer: srv}
 	pb.RegisterCaptureAgentControlServer(srv, s)
 	return s

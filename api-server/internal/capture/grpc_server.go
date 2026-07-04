@@ -12,7 +12,7 @@ import (
 
 	"github.com/rs/zerolog/log"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/credentials"
 
 	"github.com/lpoclin/coach5g/api-server/internal/pb"
 )
@@ -162,11 +162,25 @@ type Server struct {
 	// Lazy gRPC clients to capture-agent control servers, keyed by addr.
 	agentClientsMu sync.Mutex
 	agentClients   map[string]*grpc.ClientConn
+
+	// Transport credentials, constructed once at startup (see cmd/server/main.go).
+	// serverCreds is used for the StreamPackets listener (ListenAndServe).
+	// agentCreds is used when dialing a capture-agent's control server
+	// (getAgentClient). Both default to plaintext (insecure.NewCredentials())
+	// when gRPC TLS is disabled -- this package has no TLS-specific branching
+	// of its own, it only ever uses whatever credentials it was given.
+	serverCreds credentials.TransportCredentials
+	agentCreds  credentials.TransportCredentials
 }
 
 const PktRingCap = 10_000
 
-func NewServer() *Server {
+// NewServer creates the capture server. serverCreds is used for the
+// StreamPackets listener; agentCreds is used when dialing capture-agent
+// control servers. Callers always pass fully-formed, non-nil credentials --
+// insecure.NewCredentials() for today's plaintext default, or real TLS
+// credentials when grpc.tls.enabled is set (see cmd/server/main.go).
+func NewServer(serverCreds, agentCreds credentials.TransportCredentials) *Server {
 	return &Server{
 		subs:         make(map[SessionKey][]Subscriber),
 		wildcardSubs: make(map[wildcardKey][]Subscriber),
@@ -175,6 +189,8 @@ func NewServer() *Server {
 		nodeIndex:    make(map[wildcardKey]string),
 		agentIPIndex: make(map[string]string),
 		agentClients: make(map[string]*grpc.ClientConn),
+		serverCreds:  serverCreds,
+		agentCreds:   agentCreds,
 	}
 }
 
@@ -518,7 +534,7 @@ func (s *Server) getAgentClient(addr string) (pb.CaptureAgentControlClient, erro
 	if conn, ok := s.agentClients[addr]; ok {
 		return pb.NewCaptureAgentControlClient(conn), nil
 	}
-	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(s.agentCreds))
 	if err != nil {
 		return nil, err
 	}
@@ -618,7 +634,7 @@ func (s *Server) ListenAndServe(addr string) error {
 	if err != nil {
 		return err
 	}
-	srv := grpc.NewServer()
+	srv := grpc.NewServer(grpc.Creds(s.serverCreds))
 	pb.RegisterCaptureServiceServer(srv, s)
 	log.Info().Str("addr", addr).Msg("capture gRPC server listening")
 	return srv.Serve(lis)

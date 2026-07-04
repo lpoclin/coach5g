@@ -13,6 +13,20 @@ spec:
     - {{ .Values.gateway.hostname | quote }}
     - {{ .Values.gateway.ip | quote }}
   rules:
+    {{- if .Values.auth.oauth2Proxy.enabled }}
+    # Everything -> auth proxy. It forwards to the frontend, whose own nginx
+    # re-splits /api/,/ws/ to api-server -- the two-rule split used below
+    # when auth is disabled is intentionally NOT used here: a separate
+    # direct-to-api-server rule would let /api/,/ws/ bypass the auth proxy
+    # entirely. See docs/OAUTH2_PROXY_FEASIBILITY_ASSESSMENT.md, Critical Finding.
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: coach5g-auth-proxy
+          port: 4180
+    {{- else }}
     # WebSocket + API → api-server
     - matches:
         - path:
@@ -32,3 +46,4 @@ spec:
       backendRefs:
         - name: coach5g-frontend
           port: 80
+    {{- end }}

@@ -1,11 +1,12 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
+import { useOutletContext } from 'react-router-dom'
 import TopologyCanvas from '@/components/Topology/TopologyCanvas'
 import SidePanel from '@/components/Topology/SidePanel'
-import TerminalPanel from '@/components/Terminal/TerminalPanel'
 import { TopologySkeleton } from '@/components/common/LoadingSkeleton'
 import { useToast } from '@/components/common/Toast'
 import { IconRefresh } from '@/components/common/icons'
 import { useTopology } from '@/hooks/useTopology'
+import type { TopologyOutletContext } from '@/components/common/Layout'
 import type { TopologyNode, TopologyEdge } from '@/types/topology'
 
 interface NfTab {
@@ -19,12 +20,9 @@ const METRICS_REFRESH_MS = 300
 const SIDE_MIN = 400
 const SIDE_MAX = 1600
 const SIDE_DEFAULT = 800
-const TERM_MIN = 150
-const TERM_MAX = 500
-const TERM_DEFAULT = 200
 
 // Clear any previously-cached zero/invalid values so stale bad data doesn't persist.
-;['coach5g-sidepanel-width', 'coach5g-terminal-height'].forEach(k => {
+;['coach5g-sidepanel-width'].forEach(k => {
   const raw = localStorage.getItem(k)
   if (raw !== null && (Number(raw) <= 0 || isNaN(Number(raw)))) localStorage.removeItem(k)
 })
@@ -44,10 +42,9 @@ export default function TopologyPage() {
   const [nfTabs, setNfTabs] = useState<NfTab[]>([])
   const [activeNfTabId, setActiveNfTabId] = useState<string | null>(null)
   const [sidePanelOpen, setSidePanelOpen] = useState(false)
-  const [termOpen, setTermOpen]       = useState(true)
   const [sideWidth,   setSideWidth]   = useState(() => getSaved('coach5g-sidepanel-width', SIDE_DEFAULT))
-  const [termHeight,  setTermHeight]  = useState(() => getSaved('coach5g-terminal-height', TERM_DEFAULT))
   const { push } = useToast()
+  const { openExecTab } = useOutletContext<TopologyOutletContext>()
 
   // ── Side panel drag ────────────────────────────────────────────────────────
   // DOM-direct updates during drag — setSideWidth called once on mouseup only.
@@ -77,38 +74,6 @@ export default function TopologyPage() {
       try { localStorage.setItem('coach5g-sidepanel-width', String(w)) } catch { /* ok */ }
       sideDragStart.current = null
       setSideWidth(w)
-    }
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup', onUp)
-    return () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp) }
-  }, [])
-
-  // ── Terminal panel drag ────────────────────────────────────────────────────
-  // termCurrentHeightRef tracks the live drag height without triggering re-renders.
-  // setTermHeight is called exactly once on mouseup to sync React state.
-  const termCurrentHeightRef = useRef(getSaved('coach5g-terminal-height', TERM_DEFAULT))
-  const terminalBodyRef      = useRef<HTMLDivElement>(null)
-  const termDragStart        = useRef<{ y: number; h: number } | null>(null)
-
-  const onTermMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault()
-    termDragStart.current = { y: e.clientY, h: termCurrentHeightRef.current }
-  }, [])
-
-  useEffect(() => {
-    const onMove = (e: MouseEvent) => {
-      if (!termDragStart.current) return
-      const delta = termDragStart.current.y - e.clientY   // drag up → taller
-      const next  = Math.min(TERM_MAX, Math.max(TERM_MIN, termDragStart.current.h + delta))
-      termCurrentHeightRef.current = next
-      if (terminalBodyRef.current) terminalBodyRef.current.style.height = next + 'px'
-    }
-    const onUp = () => {
-      if (!termDragStart.current) return
-      const h = termCurrentHeightRef.current
-      try { localStorage.setItem('coach5g-terminal-height', String(h)) } catch { /* ok */ }
-      termDragStart.current = null
-      setTermHeight(h)
     }
     window.addEventListener('mousemove', onMove)
     window.addEventListener('mouseup', onUp)
@@ -311,6 +276,7 @@ export default function TopologyPage() {
                   activeTabId={activeNfTabId}
                   onTabSelect={(id) => setActiveNfTabId(id)}
                   onTabClose={handleTabClose}
+                  onOpenShell={openExecTab}
                 />
               ) : (
                 <div className="flex flex-col h-full" style={{ background: '#0d1117' }}>
@@ -335,25 +301,6 @@ export default function TopologyPage() {
             </div>
           </div>
         )}
-      </div>
-
-      {/* Collapsible terminal panel with drag handle */}
-      <div className="shrink-0">
-        {termOpen && (
-          <div
-            onMouseDown={onTermMouseDown}
-            className="w-full cursor-ns-resize transition-colors"
-            style={{ height: 4, background: '#30363d' }}
-            onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#58a6ff' }}
-            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = '#30363d' }}
-          />
-        )}
-        <TerminalPanel
-          open={termOpen}
-          onToggle={() => setTermOpen(v => !v)}
-          height={termHeight}
-          bodyRef={terminalBodyRef}
-        />
       </div>
     </div>
   )

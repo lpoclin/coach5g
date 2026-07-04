@@ -104,12 +104,20 @@ Check the `primaryCNI` field in the response. If it shows `"CNI"` instead of `"C
 
 ---
 
+## CORS errors or WebSocket connection failures on Tier 3
+
+**Symptom**: the app loads at your NodePort or LoadBalancer address, but the browser console shows CORS errors, or the topology/logs/captures views never connect, while `curl` against the same address works fine.
+
+**Check**: this is an origin mismatch. `allowedOrigins` defaults to `gateway.hostname` only, so an address like `http://<node-ip>:<nodeport>` or a MetalLB IP is rejected by api-server's CORS and WebSocket origin checks. Add that exact address to `values.yaml`'s `allowedOrigins` and run `helm upgrade`. See [04](04-installation-no-gateway-api.md) for the step this belongs to.
+
+---
+
 ## Using a CNI/Gateway combination not covered here
 
-If you're on a CNI other than Cilium or Flannel+Multus, or a Gateway API controller other than Cilium's, none of this guide's steps have been tested against your exact setup. Two things are confirmed independent of CNI and Gateway choice, from direct code reading, and are a safe starting point for isolating the problem:
+If you're on a CNI other than Cilium or Flannel+Multus, or a Gateway API controller other than Cilium's, none of this guide's steps have been tested against your exact setup. One thing is confirmed independent of CNI and Gateway choice, from direct code reading, and is a safe starting point for isolating the problem:
 
 The packet capture mechanism itself (`nsenter --net=/proc/<pid>/ns/net -- tcpdump`) reads only the Linux kernel's network namespace file and runs standard packet-capture syscalls inside it. It has no CNI-specific code anywhere (`capture-agent/internal/capture/nsenter.go`, full file checked). If capture doesn't work, the problem is almost certainly in pod/PID discovery (`findPodPID`, `nsenter.go:28-72`) or in RBAC/privileges (`hostPID`, `NET_RAW`/`NET_ADMIN`/`SYS_PTRACE`, `helm/templates/capture-agent-daemonset.yaml`), not in the CNI.
 
-CORS and WebSocket origin checks are wide open (`Access-Control-Allow-Origin: *`, `api-server/cmd/server/main.go:167`; `CheckOrigin` always returns `true`, `api-server/internal/handlers/topology.go:20`). Whatever address or hostname you reach the frontend at, the backend does not reject the request based on origin. If something breaks when switching exposure methods, it is not this.
+CORS and WebSocket origin checks now depend on `allowedOrigins` (`api-server/cmd/server/main.go:224`; `api-server/internal/handlers/topology.go:51`), not on the CNI or Gateway controller itself. But switching exposure methods usually means reaching the frontend at a new address, and that address has to be in `allowedOrigins` or the backend rejects it. If something breaks when switching exposure methods, check this first, per the Tier 3 entry above.
 
 For anything else, see `docs/CNI_GATEWAY_PORTABILITY_ASSESSMENT.md` for the full trace of what depends on Cilium and what doesn't, or open an issue describing your exact CNI and Gateway combination.

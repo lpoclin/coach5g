@@ -11,6 +11,38 @@ gateway:
   # does not create that pool; it must already exist as a manual, cluster-level
   # prerequisite (same as CiliumL2AnnouncementPolicy).
   ipamPoolName: default
+  tls:
+    # Adds an optional HTTPS (port 443) listener alongside the existing HTTP
+    # listener. HTTP is not removed or redirected -- both coexist. Disabled by
+    # default; enabling it does not affect any deployment that doesn't opt in.
+    enabled: false
+    # Name of the Kubernetes Secret (type kubernetes.io/tls) the HTTPS listener
+    # reads its certificate from. This chart never creates the Secret's contents
+    # directly -- either the operator creates it manually, or cert-manager does,
+    # per certManager.enabled below.
+    secretName: coach5g-tls
+    certManager:
+      # When true (and gateway.tls.enabled is also true), this chart additionally
+      # renders a cert-manager Certificate resource requesting the cert named
+      # above. Requires cert-manager itself to already be installed in the
+      # cluster -- this chart does not install cert-manager, same as it does not
+      # install Cilium's LB-IPAM pool or L2 announcement policy.
+      enabled: false
+      # ClusterIssuer name to reference. Intentionally not defaulted to any
+      # specific issuer (e.g. Let's Encrypt) -- a self-signed or internal-CA
+      # ClusterIssuer is just as likely in a lab/testbed cluster. Required when
+      # certManager.enabled is true.
+      issuerName: ""
+
+# Additional CORS/WebSocket origins api-server should accept, beyond the
+# http/https variants of gateway.hostname it always allows automatically
+# (see api-server-deployment.yaml). Add entries here for things like a
+# dev-mode Vite origin (e.g. "http://localhost:3000") or an extra hostname
+# operators use to reach the app. An origin not in this combined list is not
+# rejected outright -- the server just omits Access-Control-Allow-Origin and
+# refuses the WebSocket upgrade, so the browser blocks the call itself
+# (fail-closed).
+allowedOrigins: []
 
 frontend:
   image: ghcr.io/lpoclin/coach5g-frontend:latest
@@ -59,6 +91,84 @@ captureAgent:
       cpu: 500m
       memory: 1Gi
 
+grpc:
+  # TLS for the internal gRPC channel between api-server and capture-agent
+  # (StreamPackets ingest, and the EnableTshark/DisableTshark/Ping control
+  # calls). Disabled by default -- preserves today's plaintext behavior for
+  # anyone not opting in. See docs/RISK_ASSESSMENT_ADDITIONS.md, Addition 2.
+  tls:
+    enabled: false
+    # Secret (type kubernetes.io/tls, containing tls.crt/tls.key/ca.crt) that
+    # api-server mounts for its own server+client identity on this channel.
+    apiServerSecretName: coach5g-api-grpc-tls
+    # Secret that every capture-agent DaemonSet replica mounts for its own
+    # server+client identity. All replicas share ONE certificate/identity --
+    # DaemonSet pods are fungible, and this project already shares a single
+    # ServiceAccount across all three workloads, so per-pod certs would add
+    # PKI complexity with no meaningful security benefit in this threat model.
+    captureAgentSecretName: coach5g-capture-agent-grpc-tls
+    # Fixed logical identity encoded in the capture-agent certificate's SAN.
+    # api-server cannot verify this certificate by hostname/IP matching --
+    # it dials capture-agent's ephemeral pod IP, not a stable DNS name -- so
+    # it instead verifies the cert chains to the trusted CA AND presents this
+    # exact identity string. See api-server/internal/grpctls for the
+    # verification logic.
+    captureAgentIdentity: coach5g-capture-agent
+    certManager:
+      # When true (and grpc.tls.enabled is also true), this chart additionally
+      # renders Certificate resources for both secrets above. Requires
+      # cert-manager to already be installed, same prerequisite as the
+      # Gateway TLS Certificate. Use a CA-backed issuer (self-signed root or
+      # internal PKI), not an ACME/public issuer -- these certificates carry
+      # internal-only identities (a cluster Service name and a fixed logical
+      # name an ACME issuer has no way to validate), so ACME is not
+      # applicable to this certificate the way it is for the Gateway's.
+      enabled: false
+      issuerName: ""
+
+auth:
+  oauth2Proxy:
+    enabled: false
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.6.0   # pin explicitly; do not default to :latest for a third-party image
+    replicas: 1
+    # Externally-reachable callback URL. Must exactly match a redirect URI
+    # registered on the Google OAuth client in Google Cloud Console -- not
+    # derived automatically from gateway.hostname, since a silent mismatch
+    # here only surfaces as a cryptic error at login time.
+    redirectURL: ""
+    # Secret (created manually by the operator, never committed) containing
+    # keys: client-id, client-secret, cookie-secret. cookie-secret must be a
+    # random 16, 24, or 32-byte value, base64-encoded -- a forgeable/guessable
+    # value here lets an attacker mint valid session cookies.
+    credentialsSecretName: coach5g-oauth2-proxy-credentials
+    # Set true once gateway.tls.enabled is also true (cookies marked Secure
+    # require HTTPS). Independent flag rather than auto-derived, so the
+    # operator confirms the two are actually in sync for their deployment.
+    # Must be true if gateway.tls.enabled is true, or the session cookie
+    # won't survive the round trip over HTTPS.
+    cookieSecure: false
+    # Either or both may be set. emailDomains "*" allows any authenticated
+    # Google account; leave empty together with authenticatedEmailsFile unset
+    # only if you intend literally anyone with a Google account to sign in.
+    emailDomains: []
+    authenticatedEmailsFile:
+      enabled: false
+      # ConfigMap name containing a flat list of explicitly allowed addresses.
+      configMapName: coach5g-oauth2-proxy-allowed-emails
+    signIn:
+      banner: "<h1>COACH5G</h1>"
+      # Path/URL to a logo image. Mounted into the pod (e.g. via a ConfigMap
+      # binary volume) if a local asset, or an https:// URL if externally
+      # hosted. Empty uses OAuth2 Proxy's own default logo.
+      logoPath: ""
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 200m
+        memory: 128Mi
+
 loki:
   url: http://loki-gateway.loki
 
@@ -72,6 +182,19 @@ terminal:
   enabled: true
   sshHost: "192.168.18.210"
   sshPort: 22
+
+execTerminal:
+  # Gates Addition 4 (exec-per-pod terminal, GET /ws/exec/:namespace/:pod/:container).
+  # Off by default -- see docs/RISK_ASSESSMENT_ADDITIONS.md Addition 4 and
+  # docs/EXEC_IDENTITY_ASSESSMENT.md. When enabled, mounts a dedicated,
+  # exec-only ServiceAccount token (coach5g-exec) into api-server, scoped by
+  # a namespace-scoped Role (create on pods/exec only, one per entry in
+  # `targets` above) -- separate from the shared, read-only coach5g
+  # ServiceAccount/ClusterRole every workload uses today. Kubernetes RBAC on
+  # that dedicated ServiceAccount is the sole authorization boundary for this
+  # feature -- anyone who passes the existing OAuth2 Proxy login gate gets
+  # equal exec access, same model as every other endpoint in this app.
+  enabled: false
 
 clusterInfo:
   hypervisor: "Proxmox VE"
