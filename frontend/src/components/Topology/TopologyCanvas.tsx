@@ -68,6 +68,15 @@ function computePositions(
   edges?: TopologyEdge[],
 ): Map<string, { x: number; y: number }> {
   const nodeW   = 120   // logical node width for layout spacing
+  // DN-from-UPF horizontal offset -- deliberately its own constant, not
+  // reused from nodeW * 0.6 (psaSpacing's unrelated value), sized to clear
+  // both nodes' own half-widths plus a real visible gap. PSA-UPF/UPF nodes
+  // use the default Cytoscape node width (80); DN nodes get the narrower
+  // 'sm' class width (70) -- see the node stylesheet/classification below.
+  const UPF_HALF_WIDTH = 40   // 80 / 2
+  const DN_HALF_WIDTH  = 35   // 70 / 2
+  const DN_GAP         = 60   // desired visible gap between UPF's right edge and DN's left edge
+  const dnOffsetFromUpf = UPF_HALF_WIDTH + DN_GAP + DN_HALF_WIDTH   // 135
   const isULCL = nodes.some(n => n.nfType === 'iUPF')
   const pos = new Map<string, { x: number; y: number }>()
   if (saved) for (const n of nodes) if (saved[n.id]) pos.set(n.id, saved[n.id])
@@ -174,10 +183,10 @@ function computePositions(
     let baseXForRow: number
     if (upfPositions.length === 1) {
       y = upfPositions[0].y
-      baseXForRow = upfPositions[0].x + nodeW * 0.6
+      baseXForRow = upfPositions[0].x + dnOffsetFromUpf
     } else if (upfPositions.length > 1) {
       y = upfPositions.reduce((sum, p) => sum + p.y, 0) / upfPositions.length
-      baseXForRow = Math.max(...upfPositions.map(p => p.x)) + nodeW * 0.6
+      baseXForRow = Math.max(...upfPositions.map(p => p.x)) + dnOffsetFromUpf
     } else {
       y = fallbackY
       baseXForRow = fallbackBaseX
