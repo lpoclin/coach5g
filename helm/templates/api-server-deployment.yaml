@@ -18,6 +18,16 @@ spec:
         app: coach5g-api
         app.kubernetes.io/name: coach5g
     spec:
+      {{- /* Build {namespace: {nfLabel: dnn, ...}, ...} from targets[].dnnMap
+             for the DNN_MAP_OVERRIDE env var below -- entries only exist for
+             namespaces that actually set dnnMap, so this is a no-op ("{}")
+             for anyone not using the override. */}}
+      {{- $dnnMapByNs := dict }}
+      {{- range .Values.targets }}
+      {{- if .dnnMap }}
+      {{- $_ := set $dnnMapByNs .namespace .dnnMap }}
+      {{- end }}
+      {{- end }}
       serviceAccountName: coach5g
       {{- if .Values.apiServer.nodeSelector }}
       nodeSelector:
@@ -45,6 +55,8 @@ spec:
               value: {{ .Values.hubble.address | quote }}
             - name: TARGET_NAMESPACES
               value: "{{ range $i, $t := .Values.targets }}{{ if $i }},{{ end }}{{ $t.namespace }}{{ end }}"
+            - name: DNN_MAP_OVERRIDE
+              value: {{ $dnnMapByNs | toJson | quote }}
             {{- if .Values.terminal.enabled }}
             - name: SSH_HOST
               value: {{ .Values.terminal.sshHost | quote }}

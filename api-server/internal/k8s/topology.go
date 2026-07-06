@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/rs/zerolog/log"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -317,6 +318,7 @@ func buildDNNodes(nodes []TopologyNode, entries []coreprofile.UPFDNNEntry) ([]To
 
 	// Default if no configmaps found
 	if len(allDNNs) == 0 && hasUPF {
+		log.Warn().Msg("no DNN entries discovered or overridden for any UPF; every UPF's N6 edge will default to \"internet\" -- set targets[].dnnMap in values.yaml to override per UPF")
 		allDNNs["internet"] = struct{}{}
 	}
 
@@ -329,6 +331,11 @@ func buildDNNodes(nodes []TopologyNode, entries []coreprofile.UPFDNNEntry) ([]To
 			}
 			sort.Strings(all)
 			upfNodeDNNs[n.ID] = all
+			log.Warn().
+				Str("pod", n.PodName).
+				Str("namespace", n.Namespace).
+				Strs("defaultDNNs", all).
+				Msg("UPF has no discovered or overridden DNN mapping; falling back to default -- set targets[].dnnMap in values.yaml to override this UPF's nf label")
 		}
 	}
 

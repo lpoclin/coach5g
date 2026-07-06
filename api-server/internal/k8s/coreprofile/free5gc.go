@@ -17,11 +17,18 @@ import (
 // of the pre-refactor detectNFType/buildEdges/getUPFDNNEntries -- not a
 // rewrite -- per the classification in
 // docs/NF_CLASSIFICATION_REFACTOR_ASSESSMENT.md.
-type Free5GCProfile struct{}
+type Free5GCProfile struct {
+	// dnnMapOverride: namespace -> UPF `nf` label -> DNN name. Optional
+	// operator-set override (helm values.yaml targets[].dnnMap), consulted
+	// by ParseUPFConfig. nil/empty is the zero-configuration default: no UPF
+	// is affected, and behavior is identical to before this field existed.
+	dnnMapOverride map[string]map[string]string
+}
 
-// NewFree5GCProfile constructs the free5GC core profile.
-func NewFree5GCProfile() *Free5GCProfile {
-	return &Free5GCProfile{}
+// NewFree5GCProfile constructs the free5GC core profile. dnnMapOverride may
+// be nil, which is equivalent to an empty map.
+func NewFree5GCProfile(dnnMapOverride map[string]map[string]string) *Free5GCProfile {
+	return &Free5GCProfile{dnnMapOverride: dnnMapOverride}
 }
 
 // formatNFLabel converts the value of the `nf` pod label to (NFType, displayName, skip).
@@ -246,11 +253,16 @@ type upfYAMLDoc struct {
 }
 
 // ParseUPFConfig reads free5GC's own upfcfg.yaml ConfigMap key to discover
-// which DNNs each UPF serves.
-func (*Free5GCProfile) ParseUPFConfig(ctx context.Context, cs *kubernetes.Clientset, namespaces []string) []UPFDNNEntry {
+// which DNNs each UPF serves, then applies dnnMapOverride (if any) on top:
+// for any `nf` label listed in the override for this namespace, the override
+// wins over whatever (if anything) was auto-discovered for that label. `nf`
+// labels not present in the override are entirely unaffected by this step.
+func (p *Free5GCProfile) ParseUPFConfig(ctx context.Context, cs *kubernetes.Clientset, namespaces []string) []UPFDNNEntry {
 	var entries []UPFDNNEntry
 
 	for _, ns := range namespaces {
+		byNFLabel := make(map[string]int) // nf label -> index into entries, for the override step below
+
 		cms, err := cs.CoreV1().ConfigMaps(ns).List(ctx, metav1.ListOptions{})
 		if err != nil {
 			continue
@@ -274,7 +286,21 @@ func (*Free5GCProfile) ParseUPFConfig(ctx context.Context, cs *kubernetes.Client
 				continue
 			}
 			nfLabel := cm.Labels["nf"]
+			byNFLabel[nfLabel] = len(entries)
 			entries = append(entries, UPFDNNEntry{NFLabel: nfLabel, DNNs: dnns})
+		}
+
+		// Optional operator override (helm values.yaml targets[].dnnMap).
+		// Replaces an auto-discovered entry's DNNs if one exists for that nf
+		// label, or adds a new entry if auto-discovery found nothing for it
+		// (e.g. a ConfigMap<->Pod nf-label mismatch silently dropped it --
+		// see buildDNNodes' own fallback warning for that failure mode).
+		for nfLabel, dnn := range p.dnnMapOverride[ns] {
+			if idx, ok := byNFLabel[nfLabel]; ok {
+				entries[idx].DNNs = []string{dnn}
+			} else {
+				entries = append(entries, UPFDNNEntry{NFLabel: nfLabel, DNNs: []string{dnn}})
+			}
 		}
 	}
 	return entries

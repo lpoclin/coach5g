@@ -643,8 +643,9 @@ function TerminalPanel({ open, onToggle, height = 260, bodyRef }: TerminalPanelP
           onMouseEnter={e => { (e.target as HTMLElement).style.color = '#e6edf3' }}
           onMouseLeave={e => { (e.target as HTMLElement).style.color = '#6e7681' }}
           title={open ? 'Collapse (Ctrl+`)' : 'Expand (Ctrl+`)'}
+          aria-label={open ? 'Collapse terminal panel' : 'Expand terminal panel'}
         >
-          {open ? '⌨ Terminal ▲' : '⌨ Terminal ▼'}
+          {open ? '▼' : '▲'}
         </button>
       </div>
 

@@ -2,6 +2,23 @@ namespace: monitoring
 
 targets:
   - namespace: free5gc
+    # Optional. Key = a UPF's `nf` label (check with
+    # `kubectl get pods -n <namespace> --show-labels`); value = the DNN
+    # name/display label that UPF's N6 edge should report on the topology
+    # view. Takes priority over that UPF's own live upfcfg.yaml for exactly
+    # the nf labels listed here -- any UPF not listed keeps today's
+    # auto-discovered-from-ConfigMap behavior, unchanged. Useful when a UPF's
+    # upfcfg.yaml ConfigMap label doesn't exactly match its pod's `nf` label
+    # (which otherwise silently falls back to a single shared "internet" DN
+    # node for every UPF -- see the api-server logs for a warning when this
+    # happens), or when you simply want explicit, declarative control over a
+    # multi-DNN deployment (e.g. one UPF anchor for internet breakout, one
+    # for a MEC server, one for a third DNN) rather than relying purely on
+    # what's discovered from the cluster at runtime.
+    # dnnMap:
+    #   upf: internet
+    #   psaupf1: internet
+    #   psaupf2: mec
 
 gateway:
   ip: 192.168.18.234

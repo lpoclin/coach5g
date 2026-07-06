@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"os"
 	"os/signal"
@@ -118,11 +119,16 @@ func main() {
 	// CORE_PROFILE selects which 5G core's NF-classification/topology-edge
 	// conventions to use; free5gc is the only validated core today (see
 	// docs/NF_CLASSIFICATION_REFACTOR_ASSESSMENT.md).
+	dnnMapOverride, err := parseDNNMapOverride(envOr("DNN_MAP_OVERRIDE", ""))
+	if err != nil {
+		log.Fatal().Err(err).Msg("invalid DNN_MAP_OVERRIDE")
+	}
+
 	coreProfileName := envOr("CORE_PROFILE", "free5gc")
 	var coreProfile coreprofile.CoreProfile
 	switch coreProfileName {
 	case "free5gc":
-		coreProfile = coreprofile.NewFree5GCProfile()
+		coreProfile = coreprofile.NewFree5GCProfile(dnnMapOverride)
 	default:
 		log.Fatal().Str("CORE_PROFILE", coreProfileName).Msg("unrecognized core profile")
 	}
@@ -236,6 +242,20 @@ func envOr(key, def string) string {
 		return v
 	}
 	return def
+}
+
+// parseDNNMapOverride decodes DNN_MAP_OVERRIDE (namespace -> UPF `nf` label ->
+// DNN name), JSON-encoded by the Helm chart from values.yaml's
+// targets[].dnnMap. Empty/unset is the default, zero-configuration case.
+func parseDNNMapOverride(raw string) (map[string]map[string]string, error) {
+	m := map[string]map[string]string{}
+	if raw == "" {
+		return m, nil
+	}
+	if err := json.Unmarshal([]byte(raw), &m); err != nil {
+		return nil, err
+	}
+	return m, nil
 }
 
 // parseAllowedOrigins splits a comma-separated origin list, trimming

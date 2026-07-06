@@ -65,6 +65,7 @@ const TOP_ROW_TYPES = new Set(['NSSF', 'NEF', 'NRF', 'PCF', 'UDM', 'AUSF', 'CHF'
 function computePositions(
   nodes: TopologyNode[],
   saved?: Record<string, { x: number; y: number }>,
+  edges?: TopologyEdge[],
 ): Map<string, { x: number; y: number }> {
   const nodeW   = 120   // logical node width for layout spacing
   const isULCL = nodes.some(n => n.nfType === 'iUPF')
@@ -117,7 +118,12 @@ function computePositions(
     place('UPF', 480, BOT_ROW_Y, 130)
   }
 
-  // DN nodes — mirror the iUPF→PSA-UPF1 vector from the last PSA-UPF
+  // DN nodes — each DNN gets its own row, aligned to the Y of the UPF(s)
+  // that actually serve it (via N6 edges); a DNN shared by multiple UPFs
+  // sits at the vertical midpoint between them. Falls back to the previous
+  // mirrored-offset/hardcoded anchor only when a DN's serving UPF(s) can't
+  // be resolved from edges (e.g. missing/incomplete edge data), so nothing
+  // regresses to an undefined position.
   const dns        = nodes.filter(n => n.nfType === 'DN')
   const psasForDn  = groups.get('PSA_UPF') ?? []
   const iupfs      = groups.get('iUPF') ?? []
@@ -125,22 +131,66 @@ function computePositions(
   const lastPsaPos = pos.get(lastPsa?.id)
   const iupfPos    = pos.get(iupfs[0]?.id)
   const psa0Pos    = pos.get(psasForDn[0]?.id)
-  let dnBaseX      = isULCL ? 860 : 680
-  let dnY          = BOT_ROW_Y
+
+  let fallbackBaseX = isULCL ? 860 : 680
+  let fallbackY     = BOT_ROW_Y
   if (iupfPos && psa0Pos && lastPsaPos) {
     const dx = psa0Pos.x - iupfPos.x   // same Δx as iUPF1 → PSA-UPF1
     const dy = psa0Pos.y - iupfPos.y   // same Δy as iUPF1 → PSA-UPF1
-    dnBaseX = lastPsaPos.x + dx
-    dnY     = lastPsaPos.y + dy
+    fallbackBaseX = lastPsaPos.x + dx
+    fallbackY     = lastPsaPos.y + dy
   } else if (lastPsaPos) {
-    dnBaseX = lastPsaPos.x + nodeW * 0.6
-    dnY     = lastPsaPos.y
+    fallbackBaseX = lastPsaPos.x + nodeW * 0.6
+    fallbackY     = lastPsaPos.y
   }
-  dns.forEach((n, i) => {
-    if (pos.has(n.id)) return
-    const off = (i - (dns.length - 1) / 2) * 130
-    pos.set(n.id, { x: dnBaseX + off, y: dnY })
-  })
+
+  // DN ID → serving UPF node IDs, from N6 edges.
+  const upfsByDn = new Map<string, string[]>()
+  for (const e of edges ?? []) {
+    if (e.interface !== 'n6') continue
+    const list = upfsByDn.get(e.target) ?? []
+    list.push(e.source)
+    upfsByDn.set(e.target, list)
+  }
+
+  // Bucket DN nodes into rows keyed by resolved Y, so DNs sharing a row
+  // (e.g. one UPF serving two DNNs) still space out on X the same way the
+  // previous single-row logic did.
+  interface DnRow { y: number; baseX: number; members: TopologyNode[] }
+  const rows: DnRow[] = []
+  const rowForY = (y: number, baseX: number): DnRow => {
+    let row = rows.find(r => Math.abs(r.y - y) < 1)
+    if (!row) { row = { y, baseX, members: [] }; rows.push(row) }
+    return row
+  }
+
+  for (const dn of dns) {
+    if (pos.has(dn.id)) continue
+    const upfPositions = (upfsByDn.get(dn.id) ?? [])
+      .map(id => pos.get(id))
+      .filter((p): p is { x: number; y: number } => !!p)
+
+    let y: number
+    let baseXForRow: number
+    if (upfPositions.length === 1) {
+      y = upfPositions[0].y
+      baseXForRow = upfPositions[0].x + nodeW * 0.6
+    } else if (upfPositions.length > 1) {
+      y = upfPositions.reduce((sum, p) => sum + p.y, 0) / upfPositions.length
+      baseXForRow = Math.max(...upfPositions.map(p => p.x)) + nodeW * 0.6
+    } else {
+      y = fallbackY
+      baseXForRow = fallbackBaseX
+    }
+    rowForY(y, baseXForRow).members.push(dn)
+  }
+
+  for (const row of rows) {
+    row.members.forEach((n, i) => {
+      const off = (i - (row.members.length - 1) / 2) * 130
+      pos.set(n.id, { x: row.baseX + off, y: row.y })
+    })
+  }
 
   return pos
 }
@@ -799,7 +849,7 @@ function TopologyCanvas({
   }, [storageKey])
 
   const positions = useMemo(
-    () => computePositions(graph.nodes, savedPositions),
+    () => computePositions(graph.nodes, savedPositions, graph.edges),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [graph.nodes],
   )
@@ -1023,7 +1073,7 @@ function TopologyCanvas({
     // never discards a manual drag -- only node IDs Cytoscape has never seen
     // before fall through to computePositions' own default-layout logic.
     const known    = Object.fromEntries(cy.nodes().map(n => [n.id(), n.position()]))
-    const newPos   = computePositions(graph.nodes, known)
+    const newPos   = computePositions(graph.nodes, known, graph.edges)
     const elements = buildElements(graph, newPos)
 
     cy.batch(() => {
@@ -1066,14 +1116,14 @@ function TopologyCanvas({
     try { localStorage.removeItem(storageKey) } catch { /* ok */ }
     const cy = cyRef.current
     if (!cy) return
-    const newPos = computePositions(graph.nodes)
+    const newPos = computePositions(graph.nodes, undefined, graph.edges)
     cy.batch(() => {
       cy.nodes().forEach(n => {
         const p = newPos.get(n.id())
         if (p) n.animate({ position: p } as Parameters<typeof n.animate>[0], { duration: 300 })
       })
     })
-  }, [graph.nodes, storageKey])
+  }, [graph.nodes, graph.edges, storageKey])
 
   const handleFit = fitGraph
 
