@@ -75,8 +75,8 @@ function computePositions(
   // 'sm' class width (70) -- see the node stylesheet/classification below.
   const UPF_HALF_WIDTH = 40   // 80 / 2
   const DN_HALF_WIDTH  = 35   // 70 / 2
-  const DN_GAP         = 60   // desired visible gap between UPF's right edge and DN's left edge
-  const dnOffsetFromUpf = UPF_HALF_WIDTH + DN_GAP + DN_HALF_WIDTH   // 135
+  const DN_GAP         = 150  // desired visible gap between UPF's right edge and DN's left edge
+  const dnOffsetFromUpf = UPF_HALF_WIDTH + DN_GAP + DN_HALF_WIDTH   // 225
   const isULCL = nodes.some(n => n.nfType === 'iUPF')
   const pos = new Map<string, { x: number; y: number }>()
   if (saved) for (const n of nodes) if (saved[n.id]) pos.set(n.id, saved[n.id])
