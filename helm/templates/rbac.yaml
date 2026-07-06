@@ -16,6 +16,7 @@ rules:
       - namespaces
       - persistentvolumeclaims
       - persistentvolumes
+      - configmaps
     verbs: ["get", "list", "watch"]
   # Networking
   - apiGroups: ["k8s.cni.cncf.io"]
