@@ -126,6 +126,10 @@ export default function TopologyPage() {
   const canvasNS    = displayNS[0] ?? ''
 
   const handleNodeClick = useCallback((clickedNode: TopologyNode) => {
+    // DN nodes are synthetic (no backing pod, containers, or interfaces -- see
+    // topology.go's buildDNNodes), so SidePanel/Shell/logs would either show
+    // an empty panel or, for Shell, attempt a guaranteed-to-fail exec call.
+    if (clickedNode.nfType === 'DN') return
     setNfTabs(prev => {
       if (prev.find(t => t.id === clickedNode.id)) return prev
       return [...prev, { id: clickedNode.id, node: clickedNode, view: 'logs' }]
