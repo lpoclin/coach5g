@@ -1,0 +1,20 @@
+{{- if and .Values.auth.oauth2Proxy.enabled .Values.auth.oauth2Proxy.signIn.logoPath }}
+{{- if not (hasPrefix "https://" .Values.auth.oauth2Proxy.signIn.logoPath) }}
+# Local sign-in logo, packaged from helm/files/auth-proxy-logo.svg. Only
+# rendered when signIn.logoPath is set to a non-empty, non-"https://" value
+# (i.e. the operator wants the locally-packaged logo mounted into the pod,
+# not an externally-hosted URL passed straight through). See
+# auth-proxy-deployment.yaml for how this gets mounted and referenced.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: coach5g-auth-proxy-logo
+  namespace: {{ .Values.namespace }}
+  labels:
+    app.kubernetes.io/name: coach5g
+    app.kubernetes.io/component: auth-proxy
+data:
+  logo.svg: |-
+{{ .Files.Get "files/auth-proxy-logo.svg" | indent 4 }}
+{{- end }}
+{{- end }}

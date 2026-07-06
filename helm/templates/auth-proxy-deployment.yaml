@@ -19,6 +19,10 @@ spec:
         app: coach5g-auth-proxy
         app.kubernetes.io/name: coach5g
     spec:
+      {{- /* True when signIn.logoPath asks for the locally-packaged logo
+             (non-empty, not an https:// URL) -- see
+             auth-proxy-logo-configmap.yaml for the ConfigMap this mounts. */}}
+      {{- $useLocalLogo := and .Values.auth.oauth2Proxy.signIn.logoPath (not (hasPrefix "https://" .Values.auth.oauth2Proxy.signIn.logoPath)) }}
       containers:
         - name: oauth2-proxy
           image: {{ .Values.auth.oauth2Proxy.image }}
@@ -69,13 +73,24 @@ spec:
               value: {{ .Values.auth.oauth2Proxy.signIn.banner | quote }}
             {{- if .Values.auth.oauth2Proxy.signIn.logoPath }}
             - name: OAUTH2_PROXY_CUSTOM_SIGN_IN_LOGO
+              {{- if $useLocalLogo }}
+              value: /etc/coach5g/logo/logo.svg
+              {{- else }}
               value: {{ .Values.auth.oauth2Proxy.signIn.logoPath | quote }}
+              {{- end }}
             {{- end }}
-          {{- if .Values.auth.oauth2Proxy.authenticatedEmailsFile.enabled }}
+          {{- if or .Values.auth.oauth2Proxy.authenticatedEmailsFile.enabled $useLocalLogo }}
           volumeMounts:
+            {{- if .Values.auth.oauth2Proxy.authenticatedEmailsFile.enabled }}
             - name: allowed-emails
               mountPath: /etc/coach5g/oauth2-proxy
               readOnly: true
+            {{- end }}
+            {{- if $useLocalLogo }}
+            - name: auth-proxy-logo
+              mountPath: /etc/coach5g/logo
+              readOnly: true
+            {{- end }}
           {{- end }}
           livenessProbe:
             httpGet:
@@ -91,13 +106,23 @@ spec:
             periodSeconds: 5
           resources:
             {{- toYaml .Values.auth.oauth2Proxy.resources | nindent 12 }}
-      {{- if .Values.auth.oauth2Proxy.authenticatedEmailsFile.enabled }}
+      {{- if or .Values.auth.oauth2Proxy.authenticatedEmailsFile.enabled $useLocalLogo }}
       volumes:
+        {{- if .Values.auth.oauth2Proxy.authenticatedEmailsFile.enabled }}
         - name: allowed-emails
           configMap:
             name: {{ .Values.auth.oauth2Proxy.authenticatedEmailsFile.configMapName }}
             items:
               - key: authenticated-emails.txt
                 path: authenticated-emails.txt
+        {{- end }}
+        {{- if $useLocalLogo }}
+        - name: auth-proxy-logo
+          configMap:
+            name: coach5g-auth-proxy-logo
+            items:
+              - key: logo.svg
+                path: logo.svg
+        {{- end }}
       {{- end }}
 {{- end }}

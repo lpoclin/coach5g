@@ -174,9 +174,12 @@ auth:
       configMapName: coach5g-oauth2-proxy-allowed-emails
     signIn:
       banner: "<h1>COACH5G</h1>"
-      # Path/URL to a logo image. Mounted into the pod (e.g. via a ConfigMap
-      # binary volume) if a local asset, or an https:// URL if externally
-      # hosted. Empty uses OAuth2 Proxy's own default logo.
+      # Set to "https://..." to pass an externally-hosted logo URL straight
+      # through to OAuth2 Proxy. Set to any other non-empty value (e.g.
+      # "enabled") to use the logo packaged at helm/files/auth-proxy-logo.svg,
+      # mounted into the pod as a ConfigMap -- see
+      # auth-proxy-logo-configmap.yaml/auth-proxy-deployment.yaml. Empty
+      # (default) uses OAuth2 Proxy's own built-in logo; nothing is mounted.
       logoPath: ""
     resources:
       requests:

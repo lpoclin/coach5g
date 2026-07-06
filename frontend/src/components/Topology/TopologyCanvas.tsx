@@ -274,7 +274,7 @@ function buildStylesheet() {
     {
       selector: 'edge',
       style: {
-        'curve-style': 'bezier',
+        'curve-style': 'straight',
         'target-arrow-shape': 'none',
         'line-color': 'data(lineColor)',
         'line-style': 'data(lineStyle)',
