@@ -374,8 +374,7 @@ function ShellButton({
     <div className="relative">
       <button
         onClick={() => (containers.length > 1 ? setMenuOpen(v => !v) : openFor(containers[0] ?? ''))}
-        className="text-xs px-2 py-0.5 rounded text-slate-400 hover:text-slate-200"
-        style={{ border: '1px solid #30363d' }}
+        className="btn-secondary text-xs !px-2 !py-0.5"
         title="Open shell in this pod"
       >
         ⌨ Shell

@@ -303,27 +303,53 @@ function badgeColor(status: string, restarts: number): string {
   return BADGE_OK
 }
 
-function drawArcs(
+// Draws a sequence of small ">"-shaped chevrons spanning the actual on-screen
+// distance from src to dst, spaced at a fixed pixel interval and animated via
+// `phase` to suggest flow in the src->dst direction. Recomputes distance/unit
+// vector every call (every frame), so it stays correct under zoom, pan, and
+// manual dragging. `maxHalfHeight` caps each chevron's perpendicular size at
+// or below the caller's own node block height -- never a fixed raw-pixel
+// constant -- so the glyphs can never visually spill outside the node.
+function drawChevrons(
   ctx: CanvasRenderingContext2D,
   src: { x: number; y: number }, dst: { x: number; y: number },
-  phase: number, active: boolean,
+  phase: number, active: boolean, maxHalfHeight: number,
 ) {
-  const angle  = Math.atan2(dst.y - src.y, dst.x - src.x)
-  const spread = Math.PI * 0.45
-  for (let i = 0; i < 3; i++) {
-    const p = ((phase + i / 3) % 1)
-    const r = 12 + p * 30
-    const a = (1 - p) * (active ? 0.85 : 0.2)
+  const dx = dst.x - src.x
+  const dy = dst.y - src.y
+  const dist = Math.hypot(dx, dy)
+  if (dist < 1) return
+  const ux = dx / dist
+  const uy = dy / dist
+  const angle = Math.atan2(dy, dx)
+
+  const spacing  = 16
+  const halfH    = Math.min(6, maxHalfHeight)
+  const depth    = halfH * 0.9
+  const offset   = (phase % 1) * spacing
+  const count    = Math.floor(dist / spacing)
+
+  ctx.strokeStyle = '#f0f6fc'
+  ctx.lineWidth = active ? 1.5 : 1
+  for (let i = 0; i <= count; i++) {
+    const d = i * spacing + offset
+    if (d < 0 || d > dist) continue
+    // Fade near both ends of the actual edge, not a per-glyph radius fade.
+    const edgeFade = Math.min(1, Math.min(d, dist - d) / spacing)
+    const a = edgeFade * (active ? 0.85 : 0.2)
+    if (a <= 0.01) continue
     ctx.save()
-    ctx.translate(src.x, src.y)
+    ctx.translate(src.x + ux * d, src.y + uy * d)
+    ctx.rotate(angle)
     ctx.beginPath()
-    ctx.arc(0, 0, r, angle - spread, angle + spread)
-    ctx.strokeStyle = '#f0f6fc'
+    ctx.moveTo(-depth, -halfH)
+    ctx.lineTo(depth, 0)
+    ctx.lineTo(-depth, halfH)
     ctx.globalAlpha = a
-    ctx.lineWidth = active ? 1.5 : 1
     ctx.stroke()
     ctx.restore()
   }
+  ctx.globalAlpha = 1
 }
 
 function drawEndDot(
@@ -466,13 +492,18 @@ function runDraw(
     }
   })
 
-  // ── Wireless arcs N1 ──────────────────────────────────────────────────────
+  // ── Wireless chevrons N1 ──────────────────────────────────────────────────
   cy.edges().filter(e => e.data('iface') === 'n1').forEach(e => {
-    const sp     = (e.source() as NodeSingular).renderedPosition()
-    const dp     = (e.target() as NodeSingular).renderedPosition()
-    const active = traffic.has(e.id())
-    drawArcs(ctx, sp, dp, (t * 0.8) % 1, active)
-    drawArcs(ctx, dp, sp, (t * 0.65 + 0.5) % 1, active)
+    const srcNode = e.source() as NodeSingular
+    const dstNode = e.target() as NodeSingular
+    const sp      = srcNode.renderedPosition()
+    const dp      = dstNode.renderedPosition()
+    const active  = traffic.has(e.id())
+    // Cap chevron size against the smaller of the two endpoint nodes' own
+    // rendered height, so it stays correct (and never overflows) under zoom.
+    const maxHalfHeight = Math.min(srcNode.renderedHeight(), dstNode.renderedHeight()) / 2 - 2
+    drawChevrons(ctx, sp, dp, (t * 0.8) % 1, active, maxHalfHeight)
+    drawChevrons(ctx, dp, sp, (t * 0.65 + 0.5) % 1, active, maxHalfHeight)
   })
 
   // ── Traffic moving dots ────────────────────────────────────────────────────
@@ -988,7 +1019,11 @@ function TopologyCanvas({
   useEffect(() => {
     const cy = cyRef.current
     if (!cy) return
-    const newPos  = computePositions(graph.nodes)
+    // Diff against Cytoscape's own current positions so a periodic refresh
+    // never discards a manual drag -- only node IDs Cytoscape has never seen
+    // before fall through to computePositions' own default-layout logic.
+    const known    = Object.fromEntries(cy.nodes().map(n => [n.id(), n.position()]))
+    const newPos   = computePositions(graph.nodes, known)
     const elements = buildElements(graph, newPos)
 
     cy.batch(() => {
