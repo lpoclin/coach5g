@@ -173,7 +173,12 @@ auth:
       # ConfigMap name containing a flat list of explicitly allowed addresses.
       configMapName: coach5g-oauth2-proxy-allowed-emails
     signIn:
-      banner: "<h1>COACH5G</h1>"
+      # "-" is OAuth2 Proxy's documented value to fully disable the banner
+      # (an empty/unset value instead falls back to a dynamic message
+      # listing allowed email domains, not to no banner at all). The logo
+      # (auth-proxy-logo.svg) already renders "COACH5G" as part of the
+      # image, so no separate banner text is needed.
+      banner: "-"
       # Set to "https://..." to pass an externally-hosted logo URL straight
       # through to OAuth2 Proxy. Set to any other non-empty value (e.g.
       # "enabled") to use the logo packaged at helm/files/auth-proxy-logo.svg,
