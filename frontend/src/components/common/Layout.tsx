@@ -124,21 +124,7 @@ export default function Layout() {
       <header className="flex items-center gap-6 px-4 h-11 border-b border-border bg-bg-secondary shrink-0 z-20">
         {/* Logo */}
         <div className="flex items-center gap-2 mr-2">
-          <svg className="w-6 h-6" viewBox="0 0 32 32" fill="none">
-            <circle cx="16" cy="16" r="6" fill="none" stroke="#3b82f6" strokeWidth="2"/>
-            <circle cx="16" cy="8"  r="2.5" fill="#22c55e"/>
-            <circle cx="22" cy="12" r="2.5" fill="#f97316"/>
-            <circle cx="22" cy="20" r="2.5" fill="#a855f7"/>
-            <circle cx="16" cy="24" r="2.5" fill="#22c55e"/>
-            <circle cx="10" cy="20" r="2.5" fill="#3b82f6"/>
-            <circle cx="10" cy="12" r="2.5" fill="#3b82f6"/>
-            <line x1="16" y1="10.5" x2="16" y2="14"   stroke="#3b82f6" strokeWidth="1.5"/>
-            <line x1="20" y1="13"   x2="18" y2="14.5" stroke="#3b82f6" strokeWidth="1.5"/>
-            <line x1="20" y1="19"   x2="18" y2="17.5" stroke="#3b82f6" strokeWidth="1.5"/>
-            <line x1="16" y1="21.5" x2="16" y2="18"   stroke="#3b82f6" strokeWidth="1.5"/>
-            <line x1="12" y1="19"   x2="14" y2="17.5" stroke="#3b82f6" strokeWidth="1.5"/>
-            <line x1="12" y1="13"   x2="14" y2="14.5" stroke="#3b82f6" strokeWidth="1.5"/>
-          </svg>
+          <img src="/favicon.svg" alt="" className="w-6 h-6" />
           <span className="font-mono text-sm font-bold text-slate-100 tracking-tight select-none">
             COACH5G
           </span>
