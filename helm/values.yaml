@@ -1,5 +1,12 @@
 namespace: monitoring
 
+# Which CoreProfile (api-server/internal/k8s/coreprofile) classifies pods and
+# builds topology edges for every namespace in targets[] below. One value
+# applies to the whole coach5g-api instance -- there is no per-namespace or
+# runtime-switchable profile selection. Valid values: "free5gc" (default),
+# "open5gs".
+coreProfile: free5gc
+
 targets:
   - namespace: free5gc
     # Optional. Key = a UPF's `nf` label (check with

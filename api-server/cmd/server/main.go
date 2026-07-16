@@ -117,8 +117,7 @@ func main() {
 
 	// ── Core profile ─────────────────────────────────────────────────────────
 	// CORE_PROFILE selects which 5G core's NF-classification/topology-edge
-	// conventions to use; free5gc is the only validated core today (see
-	// docs/NF_CLASSIFICATION_REFACTOR_ASSESSMENT.md).
+	// conventions to use (see docs/NF_CLASSIFICATION_REFACTOR_ASSESSMENT.md).
 	dnnMapOverride, err := parseDNNMapOverride(envOr("DNN_MAP_OVERRIDE", ""))
 	if err != nil {
 		log.Fatal().Err(err).Msg("invalid DNN_MAP_OVERRIDE")
@@ -129,6 +128,8 @@ func main() {
 	switch coreProfileName {
 	case "free5gc":
 		coreProfile = coreprofile.NewFree5GCProfile(dnnMapOverride)
+	case "open5gs":
+		coreProfile = coreprofile.NewOpen5GSProfile()
 	default:
 		log.Fatal().Str("CORE_PROFILE", coreProfileName).Msg("unrecognized core profile")
 	}

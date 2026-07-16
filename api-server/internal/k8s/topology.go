@@ -47,6 +47,8 @@ const (
 	NFTypeNSSF    = coreprofile.NFTypeNSSF
 	NFTypeCHF     = coreprofile.NFTypeCHF
 	NFTypeNEF     = coreprofile.NFTypeNEF
+	NFTypeSCP     = coreprofile.NFTypeSCP
+	NFTypeBSF     = coreprofile.NFTypeBSF
 	NFTypeUPF     = coreprofile.NFTypeUPF
 	NFTypeIUPF    = coreprofile.NFTypeIUPF
 	NFTypeGNB     = coreprofile.NFTypeGNB
@@ -98,6 +100,7 @@ var dedupNFKeywords = map[string]bool{
 	"amf": true, "smf": true, "upf": true, "nrf": true, "ausf": true,
 	"udm": true, "udr": true, "nssf": true, "pcf": true, "chf": true,
 	"nef": true, "gnb": true, "ue": true, "webui": true, "iupf": true, "psaupf": true,
+	"scp": true, "bsf": true,
 }
 
 func isHexHash(s string) bool {

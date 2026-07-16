@@ -57,6 +57,8 @@ spec:
               value: "{{ range $i, $t := .Values.targets }}{{ if $i }},{{ end }}{{ $t.namespace }}{{ end }}"
             - name: DNN_MAP_OVERRIDE
               value: {{ $dnnMapByNs | toJson | quote }}
+            - name: CORE_PROFILE
+              value: {{ .Values.coreProfile | default "free5gc" | quote }}
             {{- if .Values.terminal.enabled }}
             - name: SSH_HOST
               value: {{ .Values.terminal.sshHost | quote }}

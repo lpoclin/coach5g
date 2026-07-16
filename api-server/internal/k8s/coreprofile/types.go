@@ -21,6 +21,8 @@ const (
 	NFTypeNSSF    NFType = "NSSF"
 	NFTypeCHF     NFType = "CHF"
 	NFTypeNEF     NFType = "NEF"
+	NFTypeSCP     NFType = "SCP"
+	NFTypeBSF     NFType = "BSF"
 	NFTypeUPF     NFType = "UPF"
 	NFTypeIUPF    NFType = "iUPF"
 	NFTypeGNB     NFType = "gNB"

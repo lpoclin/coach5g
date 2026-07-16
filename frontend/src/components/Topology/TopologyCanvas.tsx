@@ -56,11 +56,14 @@ const BUS_Y     = 175   // SBI bus horizontal line (model space)
 const MID_ROW_Y = 270   // AMF, SMF
 const BOT_ROW_Y = 480   // UE, gNB, iUPF / PSA-UPF / DN
 
-// Ordered left→right positions for top-row NFs
+// Ordered left→right positions for top-row NFs. Fixed 130px step, centered
+// on the same X=535 midpoint as the original 8-entry free5GC-only row (SCP
+// and BSF, Open5GS-only, are added as one new slot at each end -- this
+// preserves every original value unchanged rather than shifting them).
 const TOP_NF_X: Partial<Record<string, number>> = {
-  NSSF: 80, NEF: 210, NRF: 340, PCF: 470, UDM: 600, AUSF: 730, CHF: 860, UDR: 990,
+  SCP: -50, NSSF: 80, NEF: 210, NRF: 340, PCF: 470, UDM: 600, AUSF: 730, CHF: 860, UDR: 990, BSF: 1120,
 }
-const TOP_ROW_TYPES = new Set(['NSSF', 'NEF', 'NRF', 'PCF', 'UDM', 'AUSF', 'CHF', 'UDR'])
+const TOP_ROW_TYPES = new Set(['SCP', 'NSSF', 'NEF', 'NRF', 'PCF', 'UDM', 'AUSF', 'CHF', 'UDR', 'BSF'])
 
 function computePositions(
   nodes: TopologyNode[],
@@ -100,7 +103,7 @@ function computePositions(
   }
 
   // Top row: fixed X positions per spec
-  for (const nfType of ['NSSF', 'NEF', 'NRF', 'PCF', 'UDM', 'AUSF', 'CHF', 'UDR']) {
+  for (const nfType of ['SCP', 'NSSF', 'NEF', 'NRF', 'PCF', 'UDM', 'AUSF', 'CHF', 'UDR', 'BSF']) {
     place(nfType, TOP_NF_X[nfType] ?? 500, TOP_ROW_Y)
   }
 

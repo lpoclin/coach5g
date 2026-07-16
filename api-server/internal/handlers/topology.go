@@ -82,7 +82,7 @@ var systemNamespaces = map[string]bool{
 
 var nfKeywords = []string{
 	"amf", "smf", "upf", "nrf", "ausf", "udm", "udr",
-	"pcf", "nssf", "chf", "nef", "gnb", "n3iwf", "nwdaf", "scp", "sepp",
+	"pcf", "nssf", "chf", "nef", "gnb", "n3iwf", "nwdaf", "scp", "sepp", "bsf",
 }
 
 var infraKeywords = []string{"mongodb", "mysql", "postgres", "redis", "etcd"}
