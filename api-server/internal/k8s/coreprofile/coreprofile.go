@@ -58,7 +58,17 @@ func formatComponentLabel(comp string) (NFType, string, bool) {
 	switch strings.ToLower(comp) {
 	case "gnb", "gnodeb":
 		return NFTypeGNB, "gNB", false
-	case "ue":
+	// "ue": the original, still-current convention for free5GC's paired
+	// UERANSIM deployments. "ues" (plural): confirmed live on a Gradiant
+	// Open5GS deployment's UERANSIM chart (app.kubernetes.io/component=ues,
+	// app.kubernetes.io/name=ueransim-gnb -- the same `name` value the real
+	// gNB pod also carries, which is why an unmatched UE pod previously fell
+	// through to the generic app.kubernetes.io/name substring scan in
+	// classifyGeneric and got misclassified as a second gNB via the "gnb"
+	// substring in "ueransim-gnb"). Both are exact-matched, not prefix- or
+	// substring-matched, to avoid accidentally catching an unrelated future
+	// component value that merely starts with or contains "ue".
+	case "ue", "ues":
 		return NFTypeUE, "UE", false
 	default:
 		return NFTypeUnknown, "", true

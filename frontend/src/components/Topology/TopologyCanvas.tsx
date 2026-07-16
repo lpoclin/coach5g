@@ -56,14 +56,18 @@ const BUS_Y     = 175   // SBI bus horizontal line (model space)
 const MID_ROW_Y = 270   // AMF, SMF
 const BOT_ROW_Y = 480   // UE, gNB, iUPF / PSA-UPF / DN
 
-// Ordered left→right positions for top-row NFs. Fixed 130px step, centered
-// on the same X=535 midpoint as the original 8-entry free5GC-only row (SCP
-// and BSF, Open5GS-only, are added as one new slot at each end -- this
-// preserves every original value unchanged rather than shifting them).
-const TOP_NF_X: Partial<Record<string, number>> = {
-  SCP: -50, NSSF: 80, NEF: 210, NRF: 340, PCF: 470, UDM: 600, AUSF: 730, CHF: 860, UDR: 990, BSF: 1120,
-}
-const TOP_ROW_TYPES = new Set(['SCP', 'NSSF', 'NEF', 'NRF', 'PCF', 'UDM', 'AUSF', 'CHF', 'UDR', 'BSF'])
+// Canonical left→right ordering of every known top-row NF type. Not every
+// deployment produces all of these (Open5GS never produces NEF/CHF; free5GC
+// never produces SCP/BSF) -- computePositions filters this down to whichever
+// are actually present in the current graph before spacing/centering them,
+// rather than reserving a fixed slot per type regardless of presence (which
+// used to leave visible empty gaps for whatever a given core doesn't
+// produce). TOP_ROW_TYPES stays a Set for the O(1) membership check the SBI
+// bus width calculation below still needs.
+const TOP_ROW_ORDER = ['SCP', 'NSSF', 'NEF', 'NRF', 'PCF', 'UDM', 'AUSF', 'CHF', 'UDR', 'BSF']
+const TOP_ROW_TYPES = new Set(TOP_ROW_ORDER)
+const TOP_ROW_CENTER_X = 535   // same fixed midpoint the original 8-entry table used
+const TOP_ROW_STEP_X   = 130   // same fixed spacing the original 8-entry table used
 
 function computePositions(
   nodes: TopologyNode[],
@@ -102,10 +106,17 @@ function computePositions(
     })
   }
 
-  // Top row: fixed X positions per spec
-  for (const nfType of ['SCP', 'NSSF', 'NEF', 'NRF', 'PCF', 'UDM', 'AUSF', 'CHF', 'UDR', 'BSF']) {
-    place(nfType, TOP_NF_X[nfType] ?? 500, TOP_ROW_Y)
-  }
+  // Top row: evenly space and center only the types actually present in
+  // this graph -- reuses the same `groups` presence map every other row
+  // already relies on via place()'s `groups.get(nfType) ?? []`. Produces
+  // mathematically identical X values to the old fixed 8-slot table when
+  // all 8 original free5GC types are present (verified: for n=8 this
+  // formula reduces to exactly 80, 210, 340, 470, 600, 730, 860, 990).
+  const presentTopRow = TOP_ROW_ORDER.filter(t => groups.has(t))
+  presentTopRow.forEach((nfType, i) => {
+    const x = TOP_ROW_CENTER_X + (i - (presentTopRow.length - 1) / 2) * TOP_ROW_STEP_X
+    place(nfType, x, TOP_ROW_Y)
+  })
 
   // Mid row: AMF center-left, SMF center-right
   place('AMF', 310, MID_ROW_Y)
