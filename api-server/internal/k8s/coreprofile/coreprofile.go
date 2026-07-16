@@ -112,9 +112,24 @@ var fallbackNFMap = []struct {
 // iUPF interface heuristic, kept here rather than in Free5GCProfile for the
 // same reason fallbackNFMap is kept together -- see the comment there).
 func classifyGeneric(pod *corev1.Pod, ifaces []NetworkInterface) (NFType, string) {
-	// 2. component label — UERANSIM (component=gnb, component=ue)
-	if comp, ok := pod.Labels["component"]; ok {
-		nfType, display, skip := formatComponentLabel(comp)
+	// 2. component label — UERANSIM. Two different key conventions exist for
+	// the same semantic value: the bare `component` key (the original
+	// free5GC-paired UERANSIM chart this project was first validated
+	// against, component=gnb / component=ue) and the standard-prefixed
+	// `app.kubernetes.io/component` key (confirmed live on a Gradiant
+	// Open5GS deployment's UERANSIM chart, component=gnb / component=ues).
+	// Both route through the same formatComponentLabel conversion -- only
+	// the label KEY differs between charts, not the value vocabulary. Bare
+	// key checked first, purely to preserve free5GC's exact existing
+	// precedence unchanged: no pod has ever been confirmed to carry both
+	// keys at once, so this ordering doesn't currently affect any real
+	// deployment either way.
+	compVal, ok := pod.Labels["component"]
+	if !ok {
+		compVal, ok = pod.Labels["app.kubernetes.io/component"]
+	}
+	if ok {
+		nfType, display, skip := formatComponentLabel(compVal)
 		if !skip && nfType != NFTypeUnknown {
 			return nfType, display
 		}
