@@ -63,15 +63,15 @@ The infrastructure and capture views don't rely on any of this classification. T
 
 **Topology view** — three UPF instances (BranchingUPF, AnchorUPF1, AnchorUPF2) correctly discovered and classified.
 
-![free5GC topology view](img/free5gc_ulcl_topology_view.png)
+<img src="img/free5gc_ulcl_topology_view.png" alt="free5GC topology view" width="600">
 
 **Capture view** — live traffic decoded on a free5GC interface.
 
-![free5GC capture view](img/free5gc_ulcl_captures_view.png)
+<img src="img/free5gc_ulcl_captures_view.png" alt="free5GC capture view" width="600">
 
 **Infrastructure view** — cluster state for the free5GC namespace.
 
-![free5GC infrastructure view](img/free5gc_ulcl_infrastructure_view.png)
+<img src="img/free5gc_ulcl_infrastructure_view.png" alt="free5GC infrastructure view" width="600">
 
 ## Open5GS
 
