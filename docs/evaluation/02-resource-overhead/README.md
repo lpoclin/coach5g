@@ -32,12 +32,10 @@ The paper's Table II reports levels 0, 1, 4, and 8. The full sweep:
 | 7 | 1.2 | 120.8 | 12.7 | 559.3 |
 | 8 | 1.2 | 120.5 | 12.1 | 614.6 |
 
-<br>
 <img src="img/resource_overhead_cpu.png" alt="CPU usage by active capture tabs" width="500">
 <br>
 
 <img src="img/resource_overhead_ram.png" alt="Memory usage by active capture tabs" width="500">
-<br>
 
 coach5g-api stays essentially flat across the whole sweep. coach5g-capture's CPU stays low too, but its memory grows in an almost straight line, about 55–57 MiB per tab, matching a dedicated tshark process spun up for each newly opened interface. At 8 tabs, coach5g-api and coach5g-capture together use 735.1 MiB, staying under the 750 MiB the paper reports.
 
