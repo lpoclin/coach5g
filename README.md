@@ -1,110 +1,88 @@
-# coach5g
+# COACH5G
 
-Production-grade 5G SA network observability platform for Kubernetes-native testbeds.
+A web-based observability and control platform for cloud-native 5G Standalone testbeds on Kubernetes, unifying network function topology, live packet capture, and infrastructure monitoring behind a single browser interface. Validated across two independent 5G core implementations, free5GC (ULCL) and Open5GS (single-UPF), on the same testbed deployed over Proxmox with Cilium, Multus, and a Prometheus-Grafana-Loki observability stack.
 
-## Architecture
+<p align="center">
+  <img src="docs/evaluation/01-portability/img/coach5g_architecture.png" width="500" alt="COACH5G Architecture">
+</p>
 
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    Browser (React 19 + Vite)                    │
-│  ┌──────────────┐  ┌───────────────────┐  ┌─────────────────┐  │
-│  │ Topology View│  │Infrastructure View│  │  Capture View   │  │
-│  │ (Cytoscape.js│  │ (Recharts/k8s API)│  │ (Wireshark-like)│  │
-│  └──────┬───────┘  └────────┬──────────┘  └────────┬────────┘  │
-└─────────┼────────────────── ┼──────────────────────┼───────────┘
-          │ REST + WebSocket  │                      │
-┌─────────▼───────────────────▼──────────────────────▼───────────┐
-│                  api-server (Go + Gin)  :8080                   │
-│  ┌────────────┐  ┌──────────┐  ┌───────────┐  ┌─────────────┐ │
-│  │ k8s client │  │  Loki    │  │ Prometheus│  │ gRPC server │ │
-│  │ (topology) │  │  client  │  │  client   │  │ (captures)  │ │
-│  └─────┬──────┘  └────┬─────┘  └─────┬─────┘  └──────┬──────┘ │
-└────────┼──────────────┼──────────────┼────────────────┼────────┘
-         │              │              │                 │ gRPC stream
-         ▼              ▼              ▼       ┌─────────▼────────┐
-  ┌─────────────┐  ┌─────────┐  ┌──────────┐  │  capture-agent   │
-  │  k8s API    │  │  Loki   │  │Prometheus│  │  (DaemonSet)     │
-  │  :6443      │  │  :80    │  │  :9090   │  │  nsenter+tcpdump │
-  └─────────────┘  └─────────┘  └──────────┘  └──────────────────┘
-         │
-  ┌──────▼──────────────────────────────┐
-  │         Kubernetes Cluster          │
-  │  free5GC NFs  │  UERANSIM  │ Infra │
-  └─────────────────────────────────────┘
-```
+## Overview
 
-## Components
+COACH5G is built as three components, each with its own responsibility: **coach5g-api**, a Go backend that discovers and classifies network functions, proxies logs and metrics, and relays live capture data; **coach5g-capture**, a DaemonSet that attaches directly to a target pod's network interface and streams traffic to coach5g-api over gRPC; and **coach5g-frontend**, a React single-page application presenting the topology, capture, and infrastructure views. A small set of optional add-ons, encryption on the internal gRPC channel, Google-authenticated access via coach5g-auth-proxy, and remote pod access, extend the platform without changing its default behavior.
 
-| Component | Image | Description |
-|-----------|-------|-------------|
-| frontend | `ghcr.io/lpoclin/coach5g-frontend` | React SPA served by nginx |
-| api-server | `ghcr.io/lpoclin/coach5g-api` | Go REST + WebSocket backend |
-| capture-agent | `ghcr.io/lpoclin/coach5g-capture` | Privileged DaemonSet for packet capture |
+## Demo
 
-## Views
+**free5GC (ULCL)**
 
-### Topology View
-Auto-discovers all pods in target namespaces and builds a 3GPP TS 23.501-style topology graph:
-- **SBI plane** (blue): NRF hub-and-spoke with AMF, SMF, AUSF, UDM, UDR, PCF, NSSF, CHF, NEF
-- **RAN layer** (orange): gNB ↔ AMF (N2/NGAP), gNB ↔ iUPF (N3/GTP-U)
-- **User plane** (green): iUPF1 → PSA-UPF1/2 (N9), UPFs → DN (N6)
-- **PFCP plane** (purple): SMF ↔ all UPFs (N4)
+[![COACH5G Live Demo on free5GC (ULCL)](https://img.youtube.com/vi/OyHG1WxrTP0/maxresdefault.jpg)](https://youtu.be/OyHG1WxrTP0)
 
-### Infrastructure View
-Kubernetes-wide monitoring without Grafana:
-- Node resource usage (CPU/RAM/disk)
-- Cluster summary gauges
-- Time-series charts (Recharts)
-- PVC status, Events, Pod tables
+**Open5GS**
 
-### Packet Capture View
-Wireshark-style live packet capture per interface:
-- GTP-U, PFCP, HTTP/2, NGAP, NAS, SCTP decode
-- Live filter, hex dump, .pcap export
-- Multiple simultaneous capture tabs
+[![COACH5G Live Demo on Open5GS](https://img.youtube.com/vi/drQQrLlNMXg/maxresdefault.jpg)](https://youtu.be/drQQrLlNMXg)
 
-## Cluster Requirements
+## Key Results
+
+| Evaluation | Result |
+|---|---|
+| Portability | Topology discovery, live capture, and infrastructure monitoring all confirmed working against both free5GC and Open5GS deployments |
+| Resource overhead | Combined coach5g-api/coach5g-capture footprint stays under 750 MiB of memory and a few millicores of CPU, even with 8 simultaneous capture tabs |
+| Diagnostic efficiency | 56% average reduction in the number of actions required for common diagnostic tasks, compared with equivalent command-line workflows |
+
+Full experimental results, benchmark scripts, and raw measurement data are in [docs/evaluation](docs/evaluation).
+
+## Quick Start
+
+Deployment is documented step by step in [docs/deployment-guide](docs/deployment-guide):
+
+1. [Requirements](docs/deployment-guide/01-requirements.md)
+2. [Installation — Cilium Gateway](docs/deployment-guide/02-installation-cilium.md)
+3. [Installation — Generic Gateway API](docs/deployment-guide/03-installation-generic-gateway.md)
+4. [Installation — No Gateway API](docs/deployment-guide/04-installation-no-gateway-api.md)
+5. [Troubleshooting Portability](docs/deployment-guide/05-troubleshooting-portability.md)
+
+## Software Stack
 
 ```
-k8s-master:    192.168.18.210  (control plane)
-k8s-worker-1:  192.168.18.211  role=general     (free5GC CP)
-k8s-worker-2:  192.168.18.212  role=userplane   (UPF, gNB, UE)
-k8s-worker-3:  192.168.18.213  role=observability (this stack)
+COACH5G
+├── Go: 1.25.0 (api-server), 1.23.0 (capture-agent)
+├── React: 19 (Vite, Tailwind CSS, Cytoscape.js, xterm.js)
+└── Packaging: Helm, Cilium Gateway API
+
+Validated Testbed
+├── Kubernetes: 1.35.4 (kubeadm)
+├── Cilium: 1.19.3 · Multus: 4.2.4 · Gateway API: v1.4.1
+├── Longhorn: 1.11.2
+├── kube-prometheus-stack: 85.0.3 · Loki: 3.7.2
+├── free5GC: v4.2.2 · UERANSIM: v4.0.1
+└── Open5GS: v2.7.5 · UERANSIM: v3.2.6
 ```
 
-## Install
+> COACH5G is designed to be agnostic to the underlying testbed. The Validated Testbed above is documented in full in [5gc-cloudnative-testbed](https://github.com/lpoclin/5gc-cloudnative-testbed), reproducible from scratch if you don't have one of your own.
 
-```bash
-helm install coach5g ./helm \
-  --namespace monitoring \
-  --set gateway.ip=192.168.18.234
+## Repository Structure
+
+```
+coach5g/
+├── api-server/
+├── capture-agent/
+├── frontend/
+├── helm/
+├── docs/
+│   ├── deployment-guide/
+│   └── evaluation/
+│       ├── 01-portability/
+│       ├── 02-resource-overhead/
+│       └── 03-diagnostic-efficiency/
+├── LICENSE
+└── README.md
 ```
 
-Access at: `http://192.168.18.234`
+## Affiliation
 
-## Development
+<img src="docs/evaluation/01-portability/img//fiee-unmsm-logo.svg" width="400" alt="Faculty of Electronic and Electrical Engineering, UNMSM">
 
-```bash
-# Frontend
-cd frontend && npm install && npm run dev
-
-# api-server
-cd api-server && go run ./cmd/server
-
-# capture-agent (needs privileged node access)
-cd capture-agent && go run ./cmd/agent
-```
-
-## Existing Stack Integration
-
-| Service | Address |
-|---------|---------|
-| Prometheus | `kube-prometheus-stack-prometheus.monitoring:9090` |
-| Grafana | `kube-prometheus-stack-grafana.monitoring:80` |
-| Loki | `loki-gateway.loki:80` |
-| Hubble Relay | `hubble-relay.kube-system:4245` |
-| Longhorn | `longhorn-backend.longhorn-system:9500` |
+Faculty of Electronic and Electrical Engineering, Universidad Nacional Mayor de San Marcos, Lima, Peru.
 
 ## License
 
-MIT
+This project is licensed under the MIT License, allowing free use, modification, and redistribution for academic and non-academic purposes, with attribution. See [LICENSE](LICENSE) for details.
