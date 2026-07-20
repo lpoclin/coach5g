@@ -80,15 +80,15 @@ The infrastructure and capture views don't rely on any of this classification. T
 
 **Topology view** — Open5GS's single-UPF deployment, gNB and UE registered and exchanging live traffic.
 
-![Open5GS topology view](img/open5gs_topology_view.png)
+<img src="img/open5gs_topology_view.png" alt="Open5GS topology view" width="600">
 
 **Capture view** — live traffic decoded on an Open5GS interface.
 
-![Open5GS capture view](img/open5gs_captures_view.png)
+<img src="img/open5gs_captures_view.png" alt="Open5GS capture view" width="600">
 
 **Infrastructure view** — cluster state for the Open5GS namespace.
 
-![Open5GS infrastructure view](img/open5gs_infrastructure_view.png)
+<img src="img/open5gs_infrastructure_view.png" alt="Open5GS infrastructure view" width="600">
 
 ---
 
