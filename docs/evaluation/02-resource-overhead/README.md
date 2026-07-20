@@ -33,7 +33,6 @@ The paper's Table II reports levels 0, 1, 4, and 8. The full sweep:
 | 8 | 1.2 | 120.5 | 12.1 | 614.6 |
 
 <img src="img/resource_overhead_cpu.png" alt="CPU usage by active capture tabs" width="500">
-<br>
 
 <img src="img/resource_overhead_ram.png" alt="Memory usage by active capture tabs" width="500">
 
