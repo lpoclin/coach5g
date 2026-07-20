@@ -10,6 +10,21 @@ A web-based observability and control platform for cloud-native 5G Standalone te
 
 COACH5G is built as three components, each with its own responsibility: **coach5g-api**, a Go backend that discovers and classifies network functions, proxies logs and metrics, and relays live capture data; **coach5g-capture**, a DaemonSet that attaches directly to a target pod's network interface and streams traffic to coach5g-api over gRPC; and **coach5g-frontend**, a React single-page application presenting the topology, capture, and infrastructure views. A small set of optional add-ons, encryption on the internal gRPC channel, Google-authenticated access via coach5g-auth-proxy, and remote pod access, extend the platform without changing its default behavior.
 
+## Running Components
+
+Once deployed, this is what COACH5G looks like on the cluster, one pod each for the API and frontend, one capture-agent per node through its DaemonSet, and the auth proxy if enabled:
+
+```bash
+$ kubectl get pods -n monitoring -l app.kubernetes.io/name=coach5g
+NAME                                 READY   STATUS    RESTARTS   AGE
+coach5g-api-7758bb4c88-48tkm         1/1     Running   0          15h
+coach5g-auth-proxy-f7848d768-cj2sd   1/1     Running   0          13d
+coach5g-capture-kpm2h                1/1     Running   0          15h
+coach5g-capture-lg8xj                1/1     Running   0          15h
+coach5g-capture-t6stb                1/1     Running   0          15h
+coach5g-frontend-79f8bfbc5-vw8zm     1/1     Running   0          4d12h
+```
+
 ## Demo
 
 **free5GC (ULCL)**
