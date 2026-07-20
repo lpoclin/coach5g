@@ -2,6 +2,10 @@
 
 Evidence for Section IV.A of the paper: the same COACH5G deployment, switched between free5GC (ULCL) and Open5GS by changing only two Helm values, `coreProfile` and `targets[0].namespace`.
 
+## Methodology
+
+Portability and functionality were validated by deploying the same COACH5G build against two independent 5G core deployments, free5GC in a ULCL topology and Open5GS in a single-UPF topology, and confirming that topology discovery, live packet capture, and infrastructure monitoring all operate correctly in both, with no code changes between the two.
+
 ## Install Modes
 
 Switching between the two looks like this:
