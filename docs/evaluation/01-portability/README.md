@@ -54,6 +54,8 @@ The infrastructure and capture views don't rely on any of this classification. T
 
 ## free5GC (ULCL)
 
+[![Watch on YouTube](https://img.shields.io/badge/YouTube-Watch%20Demo-red?logo=youtube&logoColor=white)](https://youtu.be/OyHG1WxrTP0)
+
 [![COACH5G Live Demo on free5GC (ULCL)](https://img.youtube.com/vi/OyHG1WxrTP0/maxresdefault.jpg)](https://youtu.be/OyHG1WxrTP0)
 
 **Topology view** — three UPF instances (BranchingUPF, AnchorUPF1, AnchorUPF2) correctly discovered and classified.
@@ -69,6 +71,8 @@ The infrastructure and capture views don't rely on any of this classification. T
 ![free5GC infrastructure view](img/free5gc_ulcl_infrastructure_view.png)
 
 ## Open5GS
+
+[![Watch on YouTube](https://img.shields.io/badge/YouTube-Watch%20Demo-red?logo=youtube&logoColor=white)](https://youtu.be/drQQrLlNMXg)
 
 [![COACH5G Live Demo on Open5GS](https://img.youtube.com/vi/drQQrLlNMXg/maxresdefault.jpg)](https://youtu.be/drQQrLlNMXg)
 
